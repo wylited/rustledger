@@ -1,7 +1,7 @@
 {
     "version": "1.0.0-rc.18",
     "description": "Fast, pure Rust implementation of Beancount double-entry accounting",
-    "homepage": "https://github.com/rustledger/rustledger",
+    "homepage": "https://rustledger.github.io",
     "license": "GPL-3.0-only",
     "architecture": {
         "64bit": {

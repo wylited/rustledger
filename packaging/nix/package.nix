@@ -24,7 +24,7 @@ rustPlatform.buildRustPackage rec {
 
   meta = with lib; {
     description = "Fast, pure Rust implementation of Beancount double-entry accounting";
-    homepage = "https://github.com/rustledger/rustledger";
+    homepage = "https://rustledger.github.io";
     changelog = "https://github.com/rustledger/rustledger/releases/tag/v${version}";
     license = licenses.gpl3Only;
     maintainers = with maintainers; [ ]; # Add your nixpkgs maintainer name
