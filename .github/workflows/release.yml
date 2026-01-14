@@ -259,6 +259,19 @@ jobs:
           else
             npm publish --access public --provenance || true
           fi
+  # Trigger website rebuild to use new WASM package
+  trigger-website:
+    name: Trigger website rebuild
+    needs: publish-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger website rebuild
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+          repository: rustledger/rustledger.github.io
+          event-type: wasm-release
+
   # Publish MCP server to npm
   publish-mcp:
     name: Publish MCP server to npm
