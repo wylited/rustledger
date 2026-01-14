@@ -60,6 +60,10 @@ brew install rustledger/rustledger/rustledger
 ### Cargo
 
 ```bash
+# Pre-built binary (fast)
+cargo binstall rustledger
+
+# Build from source
 cargo install rustledger
 ```
 
