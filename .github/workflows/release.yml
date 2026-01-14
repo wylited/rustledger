@@ -204,14 +204,17 @@ jobs:
           cargo publish -p rustledger-plugin --no-verify || true
           sleep 30
 
+          echo "Publishing rustledger-importer..."
+          cargo publish -p rustledger-importer --no-verify || true
+          sleep 30
+
           echo "Publishing rustledger (CLI)..."
           cargo publish -p rustledger --no-verify || true
 
           echo "All crates published!"
-  # Build and upload WASM to GitHub release
-  upload-wasm:
-    name: Upload WASM to Release
-    needs: build
+  # Build WASM package (shared by upload-wasm and publish-wasm)
+  build-wasm:
+    name: Build WASM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -225,16 +228,35 @@ jobs:
         run: |
           cd crates/rustledger-wasm
           wasm-pack build --target web --release
+      - name: Prepare package
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          cd crates/rustledger-wasm/pkg
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json
+          sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package
+          path: crates/rustledger-wasm/pkg/
+
+  # Upload WASM to GitHub release
+  upload-wasm:
+    name: Upload WASM to Release
+    needs: build-wasm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: wasm-package
+          path: pkg
       - name: Package WASM
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
-          cd crates/rustledger-wasm/pkg
-          # Update package.json version
-          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION#v}\"/" package.json
-          sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
-          # Create archive
-          tar -czvf "../../../rustledger-wasm-${VERSION}.tar.gz" .
-          cd ../../..
+          cd pkg
+          tar -czvf "../rustledger-wasm-${VERSION}.tar.gz" .
+          cd ..
           shasum -a 256 "rustledger-wasm-${VERSION}.tar.gz" > "rustledger-wasm-${VERSION}.tar.gz.sha256"
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
@@ -247,16 +269,14 @@ jobs:
   # Publish WASM package to npm
   publish-wasm:
     name: Publish to npm
-    needs: release
+    needs: [release, build-wasm]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Download WASM artifact
+        uses: actions/download-artifact@v4
         with:
-          targets: wasm32-unknown-unknown
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+          name: wasm-package
+          path: pkg
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -264,21 +284,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - name: Update npm for OIDC support
         run: npm install -g npm@latest
-      - name: Build WASM package
-        run: |
-          cd crates/rustledger-wasm
-          wasm-pack build --target web --release
-      - name: Update package.json version
-        run: |
-          cd crates/rustledger-wasm/pkg
-          VERSION=${GITHUB_REF#refs/tags/v}
-          # Update version in package.json
-          sed -i "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" package.json
-          # Update package name if needed
-          sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
       - name: Publish to npm (trusted publishing)
         run: |
-          cd crates/rustledger-wasm/pkg
+          cd pkg
           VERSION=${GITHUB_REF#refs/tags/v}
           # Use --tag next for prereleases, --tag latest for stable
           # Use || true to continue if version already exists
@@ -345,7 +353,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -453,11 +461,12 @@ jobs:
           docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
             "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
 
-          # Commit and push
+          # Commit and push (exit 0 if nothing to commit - skips push)
           git config user.name "rustledger-ci"
           git config user.email "rustledger-ci@users.noreply.github.com"
           git add PKGBUILD .SRCINFO
-          git commit -m "Update to ${{ steps.checksums.outputs.version }}" || exit 0
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update to ${{ steps.checksums.outputs.version }}"
           git push
       - name: Update rustledger
         run: |
@@ -473,11 +482,12 @@ jobs:
           docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
             "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
 
-          # Commit and push
+          # Commit and push (exit 0 if nothing to commit - skips push)
           git config user.name "rustledger-ci"
           git config user.email "rustledger-ci@users.noreply.github.com"
           git add PKGBUILD .SRCINFO
-          git commit -m "Update to ${{ steps.checksums.outputs.version }}" || exit 0
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Update to ${{ steps.checksums.outputs.version }}"
           git push
 
   # Update nixpkgs (stable releases only)
@@ -534,6 +544,12 @@ jobs:
           gh repo fork NixOS/nixpkgs --clone --remote
           cd nixpkgs
 
+          # Check if package already exists and get current version
+          OLD_VERSION=""
+          if [ -f pkgs/by-name/ru/rustledger/package.nix ]; then
+            OLD_VERSION=$(grep 'version = "' pkgs/by-name/ru/rustledger/package.nix | head -1 | sed 's/.*version = "\([^"]*\)".*/\1/')
+          fi
+
           # Create branch
           git checkout -b "rustledger-${VERSION}"
 
@@ -572,18 +588,21 @@ jobs:
           }
           PKGEOF
 
-          # Commit and push
-          git config user.name "rustledger-ci"
-          git config user.email "rustledger-ci@users.noreply.github.com"
-          git add pkgs/by-name/ru/rustledger/package.nix
-          git commit -m "rustledger: init at ${VERSION}"
-          git push -u origin "rustledger-${VERSION}"
+          # Determine PR title and body based on whether this is init or update
+          if [ -n "$OLD_VERSION" ]; then
+            PR_TITLE="rustledger: ${OLD_VERSION} -> ${VERSION}"
+            PR_BODY="## Description
 
-          # Create PR
-          gh pr create \
-            --repo NixOS/nixpkgs \
-            --title "rustledger: init at ${VERSION}" \
-            --body "## Description
+          Update [rustledger](https://github.com/rustledger/rustledger) from ${OLD_VERSION} to ${VERSION}.
+
+          [Changelog](https://github.com/rustledger/rustledger/releases/tag/v${VERSION})
+
+          ---
+          *Automated PR from rustledger release workflow*"
+            COMMIT_MSG="rustledger: ${OLD_VERSION} -> ${VERSION}"
+          else
+            PR_TITLE="rustledger: init at ${VERSION}"
+            PR_BODY="## Description
 
           Add [rustledger](https://github.com/rustledger/rustledger), a fast pure Rust implementation of Beancount double-entry accounting.
 
@@ -598,3 +617,18 @@ jobs:
 
           ---
           *Automated PR from rustledger release workflow*"
+            COMMIT_MSG="rustledger: init at ${VERSION}"
+          fi
+
+          # Commit and push
+          git config user.name "rustledger-ci"
+          git config user.email "rustledger-ci@users.noreply.github.com"
+          git add pkgs/by-name/ru/rustledger/package.nix
+          git commit -m "$COMMIT_MSG"
+          git push -u origin "rustledger-${VERSION}"
+
+          # Create PR
+          gh pr create \
+            --repo NixOS/nixpkgs \
+            --title "$PR_TITLE" \
+            --body "$PR_BODY"
