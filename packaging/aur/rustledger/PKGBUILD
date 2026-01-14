@@ -1,6 +1,6 @@
 # Maintainer: rustledger team <rustledger@users.noreply.github.com>
 pkgname=rustledger
-pkgver=1.0.0_rc.18
+pkgver=0.1.0
 pkgrel=1
 pkgdesc="Fast, pure Rust implementation of Beancount double-entry accounting"
 arch=('x86_64' 'aarch64')

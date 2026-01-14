@@ -9,7 +9,7 @@ A pure Rust implementation of [Beancount](https://beancount.github.io/), the dou
 [![License](https://img.shields.io/crates/l/rustledger.svg)](LICENSE)
 
 [![GitHub Release](https://img.shields.io/github/v/release/rustledger/rustledger?label=release)](https://github.com/rustledger/rustledger/releases)
-[![npm](https://img.shields.io/npm/v/@rustledger/wasm/next?label=npm%20wasm)](https://www.npmjs.com/package/@rustledger/wasm)
+[![npm](https://img.shields.io/npm/v/@rustledger/wasm?label=npm%20wasm)](https://www.npmjs.com/package/@rustledger/wasm)
 [![AUR](https://img.shields.io/aur/version/rustledger?logo=arch-linux&label=AUR)](https://aur.archlinux.org/packages/rustledger)
 [![Copr](https://copr.fedorainfracloud.org/coprs/robcohen/rustledger/package/rustledger/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/robcohen/rustledger/)
 [![Packaging status](https://repology.org/badge/tiny-repos/rustledger.svg)](https://repology.org/project/rustledger/versions)

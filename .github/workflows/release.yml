@@ -2,23 +2,10 @@
 # ================
 # Triggered on version tags (v*). Builds and publishes to all distribution channels.
 #
-# RELEASE STRATEGY
-# ----------------
-# Prereleases (e.g., v1.0.0-rc.19):
-#   - GitHub Releases: ✓
-#   - crates.io: ✓
-#   - npm: ✓ (tagged as "next", not "latest")
-#   - Docker: ✓ (version tag only, no "latest")
-#   - Homebrew tap: ✓ (rustledger/homebrew-rustledger)
-#   - Scoop bucket: ✓ (rustledger/scoop-rustledger)
-#   - AUR: ✓ (user repository)
-#   - nixpkgs: ✗ (skipped)
-#
-# Stable releases (e.g., v1.0.0):
-#   - All of the above, plus:
-#   - npm: tagged as "latest"
-#   - Docker: tagged as "latest"
-#   - nixpkgs: PR created automatically
+# VERSIONING
+# ----------
+# Using semver 0.x.y until stable. All releases are published to all channels.
+# Version 1.0.0 will be the first stable release.
 #
 # DISTRIBUTION CHANNELS
 # ---------------------
@@ -32,7 +19,7 @@
 # | Homebrew     | rustledger/homebrew-rustledger         | ✓           |
 # | Scoop        | rustledger/scoop-rustledger            | ✓           |
 # | AUR          | aur.archlinux.org/rustledger{,-bin}    | ✓           |
-# | nixpkgs      | NixOS/nixpkgs (PR)                     | ✓ (stable)  |
+# | nixpkgs      | NixOS/nixpkgs (PR)                     | ✓           |
 # | COPR         | copr.fedorainfracloud.org/rustledger   | ✓           |
 # | PPA          | ppa:rustledger/rustledger              | ✓           |
 #
@@ -334,14 +321,8 @@ jobs:
       - name: Publish to npm (trusted publishing)
         run: |
           cd pkg
-          VERSION=${GITHUB_REF#refs/tags/v}
-          # Use --tag next for prereleases, --tag latest for stable
-          # Use || true to continue if version already exists
-          if [[ "$VERSION" == *"-"* ]]; then
-            npm publish --access public --provenance --tag next || true
-          else
-            npm publish --access public --provenance || true
-          fi
+          # Publish to npm (|| true to continue if version already exists)
+          npm publish --access public --provenance || true
   # Trigger website rebuild to use new WASM package
   trigger-website:
     name: Trigger website rebuild
@@ -400,7 +381,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=latest
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -454,14 +435,8 @@ jobs:
       - name: Publish to npm (trusted publishing)
         run: |
           cd packages/mcp-server
-          VERSION=${GITHUB_REF#refs/tags/v}
-          # Use --tag next for prereleases, --tag latest for stable
-          # Use || true to continue if version already exists
-          if [[ "$VERSION" == *"-"* ]]; then
-            npm publish --access public --provenance --tag next || true
-          else
-            npm publish --access public --provenance || true
-          fi
+          # Publish to npm (|| true to continue if version already exists)
+          npm publish --access public --provenance || true
 
   # Update AUR packages
   update-aur:
@@ -542,8 +517,7 @@ jobs:
     name: Update nixpkgs
     needs: release
     runs-on: ubuntu-latest
-    # Only run for stable releases (no hyphen in version)
-    if: ${{ !contains(github.ref_name, '-') }}
+    # Run for all releases (0.x.y has no hyphens, so this always runs)
     steps:
       - uses: actions/checkout@v4
       - name: Install Nix
