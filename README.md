@@ -77,6 +77,16 @@ nix run github:rustledger/rustledger -- rledger-check ledger.beancount
 nix profile install github:rustledger/rustledger
 ```
 
+### Arch Linux (AUR)
+
+```bash
+# Pre-built binary (recommended)
+yay -S rustledger-bin
+
+# Or build from source
+yay -S rustledger
+```
+
 ### Docker
 
 ```bash
