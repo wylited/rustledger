@@ -53,15 +53,17 @@ jobs:
         shell: bash
         run: |
           # Disable LTO on macOS - Apple's linker crashes on long symbol names from wasmtime
-          # Must use "off" not "false" - false still does thin-local LTO
+          # Use --config flag which reliably overrides Cargo.toml settings
           if [ "${{ runner.os }}" = "macOS" ]; then
-            export CARGO_PROFILE_RELEASE_LTO=off
+            LTO_CONFIG='--config=profile.release.lto="off"'
+          else
+            LTO_CONFIG=""
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
+            cross build --release --target ${{ matrix.target }} $LTO_CONFIG
           else
-            cargo build --release --target ${{ matrix.target }}
+            cargo build --release --target ${{ matrix.target }} $LTO_CONFIG
           fi
       - name: Package (Unix)
         if: runner.os != 'Windows'
