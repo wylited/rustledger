@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   id-token: write # Required for npm trusted publishing (OIDC)
+  packages: write # Required for GitHub Container Registry
 env:
   CARGO_TERM_COLOR: always
 jobs:
@@ -284,6 +285,61 @@ jobs:
           token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
           repository: rustledger/rustledger.github.io
           event-type: wasm-release
+
+  # Build and push Docker images
+  docker:
+    name: Build Docker images
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download musl artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: rustledger-*-linux-musl
+          merge-multiple: true
+      - name: Extract binaries
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          mkdir -p docker-context/amd64 docker-context/arm64
+          tar -xzf "artifacts/rustledger-${VERSION}-x86_64-unknown-linux-musl.tar.gz" -C docker-context/amd64
+          tar -xzf "artifacts/rustledger-${VERSION}-aarch64-unknown-linux-musl.tar.gz" -C docker-context/arm64
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate Dockerfile
+        run: |
+          cat > docker-context/Dockerfile << 'EOF'
+          FROM scratch
+          ARG TARGETARCH
+          COPY ${TARGETARCH}/* /usr/local/bin/
+          ENTRYPOINT ["rledger-check"]
+          EOF
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/rustledger/rustledger
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-context
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
 
   # Publish MCP server to npm
   publish-mcp:

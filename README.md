@@ -77,6 +77,20 @@ nix run github:rustledger/rustledger -- rledger-check ledger.beancount
 nix profile install github:rustledger/rustledger
 ```
 
+### Docker
+
+```bash
+# Validate a ledger file
+docker run --rm -v "$PWD:/data" ghcr.io/rustledger/rustledger /data/ledger.beancount
+
+# Run queries
+docker run --rm -v "$PWD:/data" --entrypoint rledger-query ghcr.io/rustledger/rustledger \
+  /data/ledger.beancount "SELECT account, SUM(position) GROUP BY account"
+
+# Use a specific version
+docker run --rm -v "$PWD:/data" ghcr.io/rustledger/rustledger:1.0.0 /data/ledger.beancount
+```
+
 ### Pre-built Binaries
 
 Download from [GitHub Releases](https://github.com/rustledger/rustledger/releases) for:
