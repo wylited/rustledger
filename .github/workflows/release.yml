@@ -33,12 +33,17 @@
 # | Scoop        | rustledger/scoop-rustledger            | ✓           |
 # | AUR          | aur.archlinux.org/rustledger{,-bin}    | ✓           |
 # | nixpkgs      | NixOS/nixpkgs (PR)                     | ✓ (stable)  |
+# | COPR         | copr.fedorainfracloud.org/rustledger   | ✓           |
+# | PPA          | ppa:rustledger/rustledger              | ✓           |
 #
 # SECRETS REQUIRED
 # ----------------
 # - CARGO_REGISTRY_TOKEN: crates.io publish
 # - WEBSITE_DISPATCH_TOKEN: Homebrew/Scoop/nixpkgs automation
 # - AUR_SSH_PRIVATE_KEY: AUR push access
+# - COPR_API_TOKEN: COPR build trigger (from copr.fedorainfracloud.org/api)
+# - LAUNCHPAD_SSH_PRIVATE_KEY: Launchpad upload access
+# - LAUNCHPAD_GPG_PRIVATE_KEY: PPA package signing
 # - (npm uses OIDC trusted publishing, no token needed)
 #
 name: Release
@@ -674,3 +679,112 @@ jobs:
             --repo NixOS/nixpkgs \
             --title "$PR_TITLE" \
             --body "$PR_BODY"
+
+  # Trigger COPR build (Fedora/RHEL)
+  # COPR is configured to build from SCM (GitHub) with spec file at packaging/rpm/rustledger.spec
+  # This job triggers a rebuild when a new release is tagged
+  update-copr:
+    name: Trigger COPR build
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install copr-cli
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-pip
+          pip3 install copr-cli
+      - name: Configure COPR
+        run: |
+          mkdir -p ~/.config
+          cat > ~/.config/copr << EOF
+          [copr-cli]
+          login = rustledger
+          username = rustledger
+          token = ${{ secrets.COPR_API_TOKEN }}
+          copr_url = https://copr.fedorainfracloud.org
+          EOF
+      - name: Trigger SCM build
+        run: |
+          # Trigger a build using COPR's SCM integration
+          # The project is configured to fetch from GitHub and use packaging/rpm/rustledger.spec
+          copr-cli build-package rustledger/rustledger \
+            --name rustledger \
+            --nowait || true
+
+  # Upload to Launchpad PPA (Ubuntu/Debian)
+  update-ppa:
+    name: Upload to PPA
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y devscripts debhelper dput gnupg rustc cargo
+      - name: Setup GPG key
+        run: |
+          echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
+          # Get key ID and set trust
+          KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
+          echo "${KEY_ID}:6:" | gpg --import-ownertrust
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LAUNCHPAD_SSH_PRIVATE_KEY }}" > ~/.ssh/launchpad
+          chmod 600 ~/.ssh/launchpad
+          cat >> ~/.ssh/config << EOF
+          Host ppa.launchpad.net
+            IdentityFile ~/.ssh/launchpad
+            User rustledger
+          EOF
+          ssh-keyscan ppa.launchpad.net >> ~/.ssh/known_hosts
+      - name: Configure dput
+        run: |
+          cat > ~/.dput.cf << EOF
+          [rustledger-ppa]
+          fqdn = ppa.launchpad.net
+          method = sftp
+          incoming = ~rustledger/ubuntu/rustledger/
+          login = rustledger
+          allow_unsigned_uploads = 0
+          EOF
+      - name: Build and upload source package
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          # Convert version: 1.0.0-rc.18 -> 1.0.0~rc.18 for Debian
+          DEB_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
+
+          # Create source tarball
+          TARBALL="rustledger_${DEB_VERSION}.orig.tar.gz"
+          git archive --format=tar.gz --prefix="rustledger-${DEB_VERSION}/" HEAD > "../${TARBALL}"
+
+          # Extract and prepare
+          cd ..
+          tar -xzf "${TARBALL}"
+          cd "rustledger-${DEB_VERSION}"
+
+          # Copy debian directory
+          cp -r $GITHUB_WORKSPACE/packaging/debian .
+
+          # Update changelog for each Ubuntu series
+          for SERIES in noble jammy focal; do
+            # Update changelog
+            CHANGES="rustledger (${DEB_VERSION}-1~${SERIES}1) ${SERIES}; urgency=medium
+
+  * Update to version ${VERSION}
+
+ -- rustledger <rustledger@users.noreply.github.com>  $(date -R)
+
+"
+            echo -e "${CHANGES}\n$(cat debian/changelog)" > debian/changelog
+
+            # Build source package
+            debuild -S -sa -k"$(gpg --list-secret-keys --keyid-format LONG | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)"
+
+            # Upload to PPA
+            dput rustledger-ppa "../rustledger_${DEB_VERSION}-1~${SERIES}1_source.changes" || true
+
+            # Restore original changelog for next series
+            git checkout debian/changelog
+          done
