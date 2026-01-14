@@ -53,8 +53,9 @@ jobs:
         shell: bash
         run: |
           # Disable LTO on macOS - Apple's linker crashes on long symbol names from wasmtime
+          # Must use "off" not "false" - false still does thin-local LTO
           if [ "${{ runner.os }}" = "macOS" ]; then
-            export CARGO_PROFILE_RELEASE_LTO=false
+            export CARGO_PROFILE_RELEASE_LTO=off
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
