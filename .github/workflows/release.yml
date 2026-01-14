@@ -393,3 +393,75 @@ jobs:
           else
             npm publish --access public --provenance || true
           fi
+
+  # Update AUR packages
+  update-aur:
+    name: Update AUR packages
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          echo "Host aur.archlinux.org" >> ~/.ssh/config
+          echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
+          echo "  User aur" >> ~/.ssh/config
+          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
+      - name: Get checksums
+        id: checksums
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "pkgver=${VERSION//-/_}" >> $GITHUB_OUTPUT
+
+          SHA_X86=$(curl -sL "https://github.com/rustledger/rustledger/releases/download/v${VERSION}/rustledger-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz" | sha256sum | cut -d' ' -f1)
+          SHA_ARM=$(curl -sL "https://github.com/rustledger/rustledger/releases/download/v${VERSION}/rustledger-v${VERSION}-aarch64-unknown-linux-gnu.tar.gz" | sha256sum | cut -d' ' -f1)
+          SHA_SRC=$(curl -sL "https://github.com/rustledger/rustledger/archive/refs/tags/v${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
+
+          echo "sha_x86=$SHA_X86" >> $GITHUB_OUTPUT
+          echo "sha_arm=$SHA_ARM" >> $GITHUB_OUTPUT
+          echo "sha_src=$SHA_SRC" >> $GITHUB_OUTPUT
+      - name: Update rustledger-bin
+        run: |
+          git clone ssh://aur@aur.archlinux.org/rustledger-bin.git /tmp/aur-bin
+          cd /tmp/aur-bin
+
+          # Update PKGBUILD
+          cp $GITHUB_WORKSPACE/packaging/aur/rustledger-bin/PKGBUILD .
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.checksums.outputs.pkgver }}/" PKGBUILD
+          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${{ steps.checksums.outputs.sha_x86 }}')/" PKGBUILD
+          sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('${{ steps.checksums.outputs.sha_arm }}')/" PKGBUILD
+
+          # Generate .SRCINFO using Docker
+          docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
+            "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
+
+          # Commit and push
+          git config user.name "rustledger-ci"
+          git config user.email "rustledger-ci@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to ${{ steps.checksums.outputs.version }}" || exit 0
+          git push
+      - name: Update rustledger
+        run: |
+          git clone ssh://aur@aur.archlinux.org/rustledger.git /tmp/aur-src
+          cd /tmp/aur-src
+
+          # Update PKGBUILD
+          cp $GITHUB_WORKSPACE/packaging/aur/rustledger/PKGBUILD .
+          sed -i "s/^pkgver=.*/pkgver=${{ steps.checksums.outputs.pkgver }}/" PKGBUILD
+          sed -i "s/^sha256sums=.*/sha256sums=('${{ steps.checksums.outputs.sha_src }}')/" PKGBUILD
+
+          # Generate .SRCINFO using Docker
+          docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
+            "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
+
+          # Commit and push
+          git config user.name "rustledger-ci"
+          git config user.email "rustledger-ci@users.noreply.github.com"
+          git add PKGBUILD .SRCINFO
+          git commit -m "Update to ${{ steps.checksums.outputs.version }}" || exit 0
+          git push
