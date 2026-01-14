@@ -45,15 +45,30 @@ Assets:Investments         5,230.50 USD
 
 ## Installation
 
-### CLI Tools
+### Quick Install (Linux/macOS)
 
 ```bash
-# Install with bean-* compatibility aliases (default)
-cargo install rustledger
-
-# Install only rledger-* commands (no bean-* aliases)
-cargo install rustledger --no-default-features
+curl -sSfL rustledger.github.io/i | sh
 ```
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew install rustledger/rustledger/rustledger
+```
+
+### Cargo
+
+```bash
+cargo install rustledger
+```
+
+### Pre-built Binaries
+
+Download from [GitHub Releases](https://github.com/rustledger/rustledger/releases) for:
+- Linux (x86_64, ARM64, glibc and musl)
+- macOS (Intel and Apple Silicon)
+- Windows (x86_64, ARM64)
 
 ### As a Library
 
@@ -61,11 +76,16 @@ cargo install rustledger --no-default-features
 cargo add rustledger-core rustledger-parser rustledger-loader
 ```
 
-### WebAssembly
+### WebAssembly (npm)
 
 ```bash
-# Build for browser/Node.js
-wasm-pack build crates/rustledger-wasm --target web
+npm install @rustledger/wasm
+```
+
+### MCP Server
+
+```bash
+npm install -g @rustledger/mcp-server
 ```
 
 ## CLI Commands
