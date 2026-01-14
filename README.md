@@ -8,6 +8,15 @@ A pure Rust implementation of [Beancount](https://beancount.github.io/), the dou
 [![codecov](https://codecov.io/gh/rustledger/rustledger/graph/badge.svg)](https://codecov.io/gh/rustledger/rustledger)
 [![License](https://img.shields.io/crates/l/rustledger.svg)](LICENSE)
 
+[![GitHub Release](https://img.shields.io/github/v/release/rustledger/rustledger?label=release)](https://github.com/rustledger/rustledger/releases)
+[![npm](https://img.shields.io/npm/v/@rustledger/wasm?label=npm%20wasm)](https://www.npmjs.com/package/@rustledger/wasm)
+[![Docker](https://img.shields.io/docker/v/rustledger/rustledger?label=docker)](https://hub.docker.com/r/rustledger/rustledger)
+[![AUR](https://img.shields.io/aur/version/rustledger?logo=arch-linux&label=AUR)](https://aur.archlinux.org/packages/rustledger)
+[![Homebrew](https://img.shields.io/homebrew/v/rustledger?label=homebrew)](https://github.com/rustledger/homebrew-rustledger)
+[![Copr](https://copr.fedorainfracloud.org/coprs/robcohen/rustledger/package/rustledger/status_image/last_build.png)](https://copr.fedorainfracloud.org/coprs/robcohen/rustledger/)
+[![PPA](https://img.shields.io/badge/PPA-ppa%3Arobcohen%2Frustledger-E95420?logo=ubuntu)](https://launchpad.net/~robcohen/+archive/ubuntu/rustledger)
+[![Packaging status](https://repology.org/badge/tiny-repos/rustledger.svg)](https://repology.org/project/rustledger/versions)
+
 ## Why rustledger?
 
 - **10x faster** than Python beancount - parse and validate large ledgers in milliseconds
