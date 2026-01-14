@@ -52,18 +52,16 @@ jobs:
       - name: Build
         shell: bash
         run: |
-          # Disable LTO on macOS - Apple's linker crashes on long symbol names from wasmtime
-          # Use --config flag which reliably overrides Cargo.toml settings
+          # Use classic linker on macOS - Xcode 15's new linker crashes on long symbol names
+          # See: https://developer.apple.com/forums/thread/737707
           if [ "${{ runner.os }}" = "macOS" ]; then
-            LTO_CONFIG='--config=profile.release.lto="off"'
-          else
-            LTO_CONFIG=""
+            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }} $LTO_CONFIG
+            cross build --release --target ${{ matrix.target }}
           else
-            cargo build --release --target ${{ matrix.target }} $LTO_CONFIG
+            cargo build --release --target ${{ matrix.target }}
           fi
       - name: Package (Unix)
         if: runner.os != 'Windows'
