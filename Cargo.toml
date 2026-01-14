@@ -130,7 +130,7 @@ unnecessary_wraps = "allow"
 multiple_crate_versions = "allow"
 
 [profile.release]
-lto = true
+lto = "thin"  # Full LTO causes Apple linker crash with long symbol names
 codegen-units = 1
 strip = true
 
