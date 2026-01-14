@@ -67,6 +67,16 @@ cargo binstall rustledger
 cargo install rustledger
 ```
 
+### Nix
+
+```bash
+# Run directly
+nix run github:rustledger/rustledger -- rledger-check ledger.beancount
+
+# Install to profile
+nix profile install github:rustledger/rustledger
+```
+
 ### Pre-built Binaries
 
 Download from [GitHub Releases](https://github.com/rustledger/rustledger/releases) for:
