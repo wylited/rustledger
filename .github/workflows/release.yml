@@ -60,29 +60,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux (glibc)
+          # Linux (glibc) - PGO enabled for native target
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
+            pgo: true
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             cross: true
-          # Linux (musl - static binaries)
+          # Linux (musl - static binaries) - cross-compiled, no PGO
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             cross: true
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             cross: true
-          # macOS
+          # macOS - PGO enabled for both architectures
           - target: x86_64-apple-darwin
-            os: macos-latest
+            os: macos-13  # Intel runner for x86_64
+            pgo: true
           - target: aarch64-apple-darwin
-            os: macos-latest
-          # Windows
+            os: macos-latest  # ARM runner
+            pgo: true
+          # Windows - PGO enabled for x86_64
           - target: x86_64-pc-windows-msvc
             os: windows-latest
+            pgo: true
           - target: aarch64-pc-windows-msvc
             os: windows-latest
+            # No PGO - can't run ARM binary on x86 runner
     steps:
       - uses: actions/checkout@v4
         with:
@@ -91,26 +96,29 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+          components: llvm-tools-preview
       - name: Install cross
         if: matrix.cross
         uses: taiki-e/install-action@cross
       - name: Install cargo-pgo
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.pgo
         run: cargo install cargo-pgo
-      - name: Generate benchmark for PGO
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Generate benchmark for PGO (Unix)
+        if: matrix.pgo && runner.os != 'Windows'
         run: |
           # Generate a representative workload for PGO profiling
           python3 << 'EOF'
           import random
           from datetime import date, timedelta
+          import os
           random.seed(42)
           accounts = [
               "Assets:Bank:Checking", "Assets:Bank:Savings", "Assets:Investments:Stocks",
               "Liabilities:CreditCard", "Expenses:Food:Groceries", "Expenses:Food:Restaurant",
               "Expenses:Transport:Gas", "Expenses:Utilities:Electric", "Income:Salary", "Equity:Opening-Balances",
           ]
-          with open("/tmp/benchmark.beancount", "w") as f:
+          benchmark_path = os.path.join(os.environ.get('RUNNER_TEMP', '/tmp'), 'benchmark.beancount')
+          with open(benchmark_path, "w") as f:
               f.write('option "operating_currency" "USD"\n\n')
               for acc in accounts:
                   f.write(f"2020-01-01 open {acc}\n")
@@ -124,30 +132,80 @@ jobs:
                   f.write(f'{d} * "Payee {i % 100}" "Transaction {i}"\n')
                   f.write(f"  {expense}  {amount} USD\n")
                   f.write(f"  {source}\n\n")
+          print(f"Generated benchmark at {benchmark_path}")
           EOF
-      - name: Build with PGO (x86_64-linux)
-        if: matrix.target == 'x86_64-unknown-linux-gnu'
+      - name: Generate benchmark for PGO (Windows)
+        if: matrix.pgo && runner.os == 'Windows'
+        shell: pwsh
         run: |
+          $benchmarkPath = Join-Path $env:RUNNER_TEMP "benchmark.beancount"
+          $random = New-Object System.Random(42)
+          $accounts = @(
+              "Assets:Bank:Checking", "Assets:Bank:Savings", "Assets:Investments:Stocks",
+              "Liabilities:CreditCard", "Expenses:Food:Groceries", "Expenses:Food:Restaurant",
+              "Expenses:Transport:Gas", "Expenses:Utilities:Electric", "Income:Salary", "Equity:Opening-Balances"
+          )
+          $expenseAccounts = $accounts | Where-Object { $_ -like "Expenses:*" }
+          $sourceAccounts = @("Assets:Bank:Checking", "Liabilities:CreditCard")
+          $content = @('option "operating_currency" "USD"', '')
+          foreach ($acc in $accounts) {
+              $content += "2020-01-01 open $acc"
+          }
+          $content += ''
+          $startDate = [DateTime]::new(2020, 1, 1)
+          for ($i = 0; $i -lt 10000; $i++) {
+              $d = $startDate.AddDays([Math]::Floor($i / 10)).ToString("yyyy-MM-dd")
+              $amount = [Math]::Round($random.NextDouble() * 495 + 5, 2)
+              $expense = $expenseAccounts[$random.Next($expenseAccounts.Length)]
+              $source = $sourceAccounts[$random.Next($sourceAccounts.Length)]
+              $content += "$d * `"Payee $($i % 100)`" `"Transaction $i`""
+              $content += "  $expense  $amount USD"
+              $content += "  $source"
+              $content += ''
+          }
+          $content | Out-File -FilePath $benchmarkPath -Encoding utf8
+          Write-Host "Generated benchmark at $benchmarkPath"
+      - name: Build with PGO (Unix)
+        if: matrix.pgo && runner.os != 'Windows'
+        shell: bash
+        run: |
+          BENCHMARK_PATH="${RUNNER_TEMP}/benchmark.beancount"
+
+          # macOS: Use classic linker to avoid Xcode 15 crashes on long symbol names
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
+          fi
+
           # Step 1: Build instrumented binary
           cargo pgo build -- --no-default-features --features bean-compat
 
           # Step 2: Run workload to collect profile data
           for i in {1..10}; do
-            ./target/x86_64-unknown-linux-gnu/release/rledger-check /tmp/benchmark.beancount > /dev/null 2>&1
+            ./target/${{ matrix.target }}/release/rledger-check "$BENCHMARK_PATH" > /dev/null 2>&1
           done
 
           # Step 3: Build optimized binary using profile data
           cargo pgo optimize build -- --no-default-features --features bean-compat
-      - name: Build (other targets)
-        if: matrix.target != 'x86_64-unknown-linux-gnu'
+      - name: Build with PGO (Windows)
+        if: matrix.pgo && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $benchmarkPath = Join-Path $env:RUNNER_TEMP "benchmark.beancount"
+
+          # Step 1: Build instrumented binary
+          cargo pgo build -- --no-default-features --features bean-compat
+
+          # Step 2: Run workload to collect profile data
+          for ($i = 0; $i -lt 10; $i++) {
+            & "./target/${{ matrix.target }}/release/rledger-check.exe" $benchmarkPath | Out-Null
+          }
+
+          # Step 3: Build optimized binary using profile data
+          cargo pgo optimize build -- --no-default-features --features bean-compat
+      - name: Build without PGO (cross-compiled targets)
+        if: ${{ !matrix.pgo }}
         shell: bash
         run: |
-          # Use classic linker on macOS - Xcode 15's new linker crashes on long symbol names
-          # See: https://developer.apple.com/forums/thread/737707
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
-          fi
-
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
           else
