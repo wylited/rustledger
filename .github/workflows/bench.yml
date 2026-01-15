@@ -1,41 +1,169 @@
-# Benchmark workflow - runs nightly and on releases
+# Benchmark workflow - compares rustledger vs Python beancount
 name: Benchmarks
 on:
-  # Nightly schedule (2 AM UTC)
   schedule:
-    - cron: '0 2 * * *'
-  # On releases
+    - cron: '0 2 * * *'  # Nightly at 2 AM UTC
   release:
     types: [published]
-  # Manual trigger
   workflow_dispatch:
+
+permissions:
+  contents: write  # To update benchmark results
+
 env:
   CARGO_TERM_COLOR: always
-  CARGO_BUILD_JOBS: 2
-permissions:
-  contents: read
+
 jobs:
-  benchmark:
-    name: Performance Benchmarks
+  benchmark-comparison:
+    name: Compare rustledger vs Python beancount
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+
       - uses: dtolnay/rust-toolchain@stable
+
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
           prefix-key: bench
-      - name: Run benchmarks
-        run: |
-          # Skip pipeline_bench - requires full rustledger with wasmtime, exceeds runner memory
-          cargo bench -p rustledger-core --bench inventory_bench
-          cargo bench -p rustledger-parser --bench parser_bench
-          cargo bench -p rustledger-query --bench query_bench
-          cargo bench -p rustledger-validate --bench validate_bench
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          name: benchmark-results-${{ github.sha }}
-          path: target/criterion
-          retention-days: 30
+          python-version: '3.11'
+
+      - name: Install Python beancount
+        run: pip install beancount
+
+      - name: Build rustledger
+        run: cargo build --release -p rustledger
+
+      - name: Generate test ledger
+        run: |
+          # Generate a reproducible test ledger with 10K transactions
+          python3 << 'EOF'
+          import random
+          from datetime import date, timedelta
+
+          random.seed(42)  # Reproducible
+
+          accounts = [
+              "Assets:Bank:Checking",
+              "Assets:Bank:Savings",
+              "Assets:Investments:Stocks",
+              "Liabilities:CreditCard",
+              "Expenses:Food:Groceries",
+              "Expenses:Food:Restaurant",
+              "Expenses:Transport:Gas",
+              "Expenses:Transport:PublicTransit",
+              "Expenses:Utilities:Electric",
+              "Expenses:Utilities:Internet",
+              "Expenses:Shopping:Clothing",
+              "Expenses:Shopping:Electronics",
+              "Income:Salary",
+              "Income:Interest",
+              "Equity:Opening-Balances",
+          ]
+
+          with open("benchmark.beancount", "w") as f:
+              f.write('option "operating_currency" "USD"\n\n')
+
+              # Open accounts
+              for acc in accounts:
+                  f.write(f"2020-01-01 open {acc}\n")
+              f.write("\n")
+
+              # Generate 10K transactions
+              start_date = date(2020, 1, 1)
+              for i in range(10000):
+                  d = start_date + timedelta(days=i // 10)
+                  amount = round(random.uniform(5, 500), 2)
+                  expense = random.choice([a for a in accounts if a.startswith("Expenses:")])
+                  source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
+                  payee = f"Payee {i % 100}"
+                  narration = f"Transaction {i}"
+
+                  f.write(f'{d} * "{payee}" "{narration}"\n')
+                  f.write(f"  {expense}  {amount} USD\n")
+                  f.write(f"  {source}\n\n")
+
+          print("Generated benchmark.beancount with 10,000 transactions")
+          EOF
+
+      - name: Benchmark Python beancount
+        id: python_bench
+        run: |
+          # Warm up
+          bean-check benchmark.beancount > /dev/null 2>&1
+
+          # Run 5 times and average
+          total=0
+          for i in {1..5}; do
+            start=$(date +%s%N)
+            bean-check benchmark.beancount > /dev/null 2>&1
+            end=$(date +%s%N)
+            elapsed=$(( (end - start) / 1000000 ))
+            total=$((total + elapsed))
+          done
+          avg=$((total / 5))
+          echo "python_ms=$avg" >> $GITHUB_OUTPUT
+          echo "Python beancount: ${avg}ms (avg of 5 runs)"
+
+      - name: Benchmark rustledger
+        id: rust_bench
+        run: |
+          # Warm up
+          ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1
+
+          # Run 5 times and average
+          total=0
+          for i in {1..5}; do
+            start=$(date +%s%N)
+            ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1
+            end=$(date +%s%N)
+            elapsed=$(( (end - start) / 1000000 ))
+            total=$((total + elapsed))
+          done
+          avg=$((total / 5))
+          echo "rust_ms=$avg" >> $GITHUB_OUTPUT
+          echo "rustledger: ${avg}ms (avg of 5 runs)"
+
+      - name: Calculate speedup and update results
+        run: |
+          python_ms=${{ steps.python_bench.outputs.python_ms }}
+          rust_ms=${{ steps.rust_bench.outputs.rust_ms }}
+          speedup=$(echo "scale=1; $python_ms / $rust_ms" | bc)
+
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Tool | Time (10K transactions) |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------------------------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Python beancount | ${python_ms}ms |" >> $GITHUB_STEP_SUMMARY
+          echo "| rustledger | ${rust_ms}ms |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Speedup: ${speedup}x faster**" >> $GITHUB_STEP_SUMMARY
+
+          # Create JSON for badge
+          mkdir -p .github/badges
+          cat > .github/badges/benchmark.json << ENDJSON
+          {
+            "schemaVersion": 1,
+            "label": "speedup",
+            "message": "${speedup}x faster",
+            "color": "brightgreen",
+            "python_ms": $python_ms,
+            "rust_ms": $rust_ms,
+            "speedup": $speedup,
+            "transactions": 10000,
+            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          ENDJSON
+
+      - name: Commit benchmark results
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/badges/benchmark.json
+          git diff --staged --quiet || git commit -m "chore: update benchmark results [skip ci]"
+          git push || echo "Nothing to push"

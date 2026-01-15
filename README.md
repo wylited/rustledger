@@ -4,7 +4,7 @@
 
 **A blazing-fast Rust implementation of [Beancount](https://beancount.github.io/)**
 
-Parse and validate your ledger 10x faster than Python beancount.
+Parse and validate your ledger faster than Python beancount.
 
 [![CI](https://github.com/rustledger/rustledger/actions/workflows/ci.yml/badge.svg)](https://github.com/rustledger/rustledger/actions/workflows/ci.yml)
 [![GitHub Release](https://img.shields.io/github/v/release/rustledger/rustledger)](https://github.com/rustledger/rustledger/releases)
@@ -18,7 +18,7 @@ Parse and validate your ledger 10x faster than Python beancount.
 
 | | |
 |---|---|
-| **10x faster** | Parse and validate large ledgers in milliseconds |
+| **Much faster** | Parse and validate large ledgers in milliseconds ([see benchmarks](#performance)) |
 | **Single binary** | No Python, no dependencies, just download and run |
 | **Drop-in replacement** | Compatible `bean-*` CLI commands for easy migration |
 | **Full compatibility** | Parses any valid beancount file |
@@ -192,13 +192,9 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 
 ## Performance
 
-~10x faster than Python beancount:
+[![Benchmark](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/rustledger/rustledger/main/.github/badges/benchmark.json)](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)
 
-| Operation | Python | rustledger |
-|-----------|--------|------------|
-| Parse 10K txns | ~800ms | ~80ms |
-| Full validation | ~1.2s | ~120ms |
-| BQL query | ~200ms | ~20ms |
+Benchmarks run nightly on identical 10K transaction ledgers. See [workflow results](https://github.com/rustledger/rustledger/actions/workflows/bench.yml) for details.
 
 ## npm Packages
 
