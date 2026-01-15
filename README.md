@@ -86,6 +86,7 @@ Download from [GitHub Releases](https://github.com/rustledger/rustledger/release
 | `rledger-report` | Generate balance, account, and statistics reports |
 | `rledger-doctor` | Debugging tools for ledger issues |
 | `rledger-extract` | Import transactions from CSV/OFX bank statements |
+| `rledger-price` | Fetch commodity prices from online sources |
 
 Python beancount users can also use `bean-check`, `bean-query`, etc.
 
@@ -142,15 +143,17 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 | `rustledger-importer` | CSV/OFX import framework |
 
 <details>
-<summary><strong>Booking methods</strong></summary>
+<summary><strong>Booking methods (7)</strong></summary>
 
 | Method | Description |
 |--------|-------------|
 | `STRICT` | Lots must match exactly (default) |
+| `STRICT_WITH_SIZE` | Exact-size matches accept oldest lot |
 | `FIFO` | First in, first out |
 | `LIFO` | Last in, first out |
 | `HIFO` | Highest cost first |
 | `AVERAGE` | Average cost basis |
+| `NONE` | No cost tracking |
 
 </details>
 
@@ -159,14 +162,20 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 
 | Plugin | Description |
 |--------|-------------|
-| `implicit_prices` | Generate price entries from costs |
-| `auto_accounts` | Auto-generate Open directives |
+| `implicit_prices` | Generate price entries from transaction costs |
 | `check_commodity` | Validate commodity declarations |
+| `auto_accounts` | Auto-generate Open directives |
 | `leafonly` | Error on postings to non-leaf accounts |
-| `noduplicates` | Duplicate transaction detection |
+| `noduplicates` | Hash-based duplicate transaction detection |
 | `onecommodity` | Single commodity per account |
+| `unique_prices` | One price per day per commodity pair |
+| `check_closing` | Zero balance assertion on account close |
+| `close_tree` | Close descendant accounts |
+| `coherent_cost` | Enforce cost OR price (not both) |
+| `sellgains` | Cross-check capital gains against sales |
 | `pedantic` | Enable all strict validations |
 | `unrealized` | Calculate unrealized gains |
+| `nounused` | Warn on unused accounts |
 
 </details>
 
