@@ -21,8 +21,9 @@ Push the speedup from 5x to **10-20x** through systematic optimization.
 | Phase 0.1: Arc<str> | 160ms | 134ms | **16% faster** |
 | Phase 1.1: Rc for closures | 113ms | 141ms | ❌ 25% slower (reverted) |
 | Phase 2: SmallVec | 113ms | 143ms | ❌ 27% slower (reverted) |
+| Phase 4: Rayon parallelization | 113ms | 108ms | **~5% faster** |
 
-**Note**: Local benchmarks run on 10K transaction ledger. Rc and SmallVec add overhead that outweighs benefits for this workload.
+**Note**: Local benchmarks run on 10K transaction ledger. Rc and SmallVec add overhead that outweighs benefits. Rayon helps modestly but the workload may be too small to see full benefit.
 
 ---
 

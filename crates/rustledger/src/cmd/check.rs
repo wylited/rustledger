@@ -3,8 +3,10 @@
 use crate::cmd::completions::ShellType;
 use crate::report::{self, SourceCache};
 use anyhow::{Context, Result};
+use chrono::NaiveDate;
 use clap::Parser;
-use rustledger_booking::interpolate;
+use rayon::prelude::*;
+use rustledger_booking::{interpolate, InterpolationError};
 use rustledger_core::Directive;
 use rustledger_loader::{LoadError, Loader};
 #[cfg(feature = "wasm")]
@@ -290,24 +292,27 @@ fn run(args: &Args) -> Result<ExitCode> {
         }
     }
 
-    // Run interpolation on transactions
+    // Run interpolation on transactions (parallel)
     if args.verbose && !args.quiet {
         eprintln!("Interpolating {} directives...", directives.len());
     }
 
-    let mut interpolation_errors = Vec::new();
-    for directive in &mut directives {
-        if let Directive::Transaction(txn) = directive {
-            match interpolate(txn) {
-                Ok(result) => {
-                    *txn = result.transaction;
+    let interpolation_errors: Vec<(NaiveDate, String, InterpolationError)> = directives
+        .par_iter_mut()
+        .filter_map(|directive| {
+            if let Directive::Transaction(txn) = directive {
+                match interpolate(txn) {
+                    Ok(result) => {
+                        *txn = result.transaction;
+                        None
+                    }
+                    Err(e) => Some((txn.date, txn.narration.clone(), e)),
                 }
-                Err(e) => {
-                    interpolation_errors.push((txn.date, txn.narration.clone(), e));
-                }
+            } else {
+                None
             }
-        }
-    }
+        })
+        .collect();
 
     if !args.quiet && !interpolation_errors.is_empty() {
         for (date, narration, err) in &interpolation_errors {

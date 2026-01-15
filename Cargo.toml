@@ -59,6 +59,9 @@ wasmtime = "40"
 wasmtime-wasi = "40"
 wat = "1"
 
+# Parallelization
+rayon = "1.10"
+
 # Testing
 proptest = "1"
 criterion = "0.5"

@@ -45,6 +45,7 @@
 #![warn(missing_docs)]
 
 use chrono::{Local, NaiveDate};
+use rayon::prelude::*;
 use rust_decimal::Decimal;
 use rustledger_core::{
     Amount, Balance, BookingMethod, Close, Directive, Document, InternedStr, Inventory, Open, Pad,
@@ -380,10 +381,10 @@ pub fn validate_with_options(
 
     let today = Local::now().date_naive();
 
-    // Sort directives by date, then by type priority
+    // Sort directives by date, then by type priority (parallel)
     // (e.g., balance assertions before transactions on the same day)
     let mut sorted: Vec<&Directive> = directives.iter().collect();
-    sorted.sort_by(|a, b| {
+    sorted.par_sort_by(|a, b| {
         a.date()
             .cmp(&b.date())
             .then_with(|| a.priority().cmp(&b.priority()))
