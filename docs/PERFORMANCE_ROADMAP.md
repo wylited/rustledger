@@ -20,11 +20,14 @@ Push the speedup from 5x to **10-20x** through systematic optimization.
 |--------|--------|-------|-------------|
 | Phase 0.1: Arc<str> | 160ms | 134ms | **16% faster** |
 | Phase 1.1: Rc for closures | 113ms | 141ms | ❌ 25% slower (reverted) |
+| Phase 1.1: Zero-copy primitives | 108ms | 101ms | **~7% faster** |
 | Phase 2: SmallVec | 113ms | 143ms | ❌ 27% slower (reverted) |
 | Phase 4: Rayon parallelization | 113ms | 108ms | **~5% faster** |
 | Phase 0.2: PGO | 108ms | 94ms | **13% faster** |
 
 **Combined improvement**: 160ms → 94ms = **41% faster** (1.7x speedup on top of existing gains)
+
+**With zero-copy primitives + PGO**: ~87ms projected (160ms → 87ms = **46% faster**)
 
 **Note**: Local benchmarks run on 10K transaction ledger. Rc and SmallVec add overhead that outweighs benefits. PGO and Rayon together provide significant gains.
 
