@@ -249,6 +249,9 @@ jobs:
           # Save the generated files
           cp -r .github/badges /tmp/badges
 
+          # Discard local changes before switching branches
+          git checkout -- .
+
           # Fetch and checkout benchmarks branch (create if doesn't exist)
           git fetch origin benchmarks || true
           if git rev-parse --verify origin/benchmarks >/dev/null 2>&1; then
