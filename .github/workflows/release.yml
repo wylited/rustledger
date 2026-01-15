@@ -94,7 +94,52 @@ jobs:
       - name: Install cross
         if: matrix.cross
         uses: taiki-e/install-action@cross
-      - name: Build
+      - name: Install cargo-pgo
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo install cargo-pgo
+      - name: Generate benchmark for PGO
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          # Generate a representative workload for PGO profiling
+          python3 << 'EOF'
+          import random
+          from datetime import date, timedelta
+          random.seed(42)
+          accounts = [
+              "Assets:Bank:Checking", "Assets:Bank:Savings", "Assets:Investments:Stocks",
+              "Liabilities:CreditCard", "Expenses:Food:Groceries", "Expenses:Food:Restaurant",
+              "Expenses:Transport:Gas", "Expenses:Utilities:Electric", "Income:Salary", "Equity:Opening-Balances",
+          ]
+          with open("/tmp/benchmark.beancount", "w") as f:
+              f.write('option "operating_currency" "USD"\n\n')
+              for acc in accounts:
+                  f.write(f"2020-01-01 open {acc}\n")
+              f.write("\n")
+              start_date = date(2020, 1, 1)
+              for i in range(10000):
+                  d = start_date + timedelta(days=i // 10)
+                  amount = round(random.uniform(5, 500), 2)
+                  expense = random.choice([a for a in accounts if a.startswith("Expenses:")])
+                  source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
+                  f.write(f'{d} * "Payee {i % 100}" "Transaction {i}"\n')
+                  f.write(f"  {expense}  {amount} USD\n")
+                  f.write(f"  {source}\n\n")
+          EOF
+      - name: Build with PGO (x86_64-linux)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          # Step 1: Build instrumented binary
+          cargo pgo build -- --no-default-features --features bean-compat
+
+          # Step 2: Run workload to collect profile data
+          for i in {1..10}; do
+            ./target/x86_64-unknown-linux-gnu/release/rledger-check /tmp/benchmark.beancount > /dev/null 2>&1
+          done
+
+          # Step 3: Build optimized binary using profile data
+          cargo pgo optimize build -- --no-default-features --features bean-compat
+      - name: Build (other targets)
+        if: matrix.target != 'x86_64-unknown-linux-gnu'
         shell: bash
         run: |
           # Use classic linker on macOS - Xcode 15's new linker crashes on long symbol names
@@ -104,9 +149,9 @@ jobs:
           fi
 
           if [ "${{ matrix.cross }}" = "true" ]; then
-            cross build --release --target ${{ matrix.target }}
+            cross build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
           else
-            cargo build --release --target ${{ matrix.target }}
+            cargo build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
           fi
       - name: Package (Unix)
         if: runner.os != 'Windows'
