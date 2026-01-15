@@ -13,6 +13,9 @@ on:
       - 'crates/rustledger-core/src/inventory.rs'
       - 'crates/rustledger-booking/src/**'
 
+permissions:
+  contents: read
+
 env:
   TLA_VERSION: "1.8.0"
 
