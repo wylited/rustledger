@@ -14,6 +14,14 @@ Push the speedup from 5x to **10-20x** through systematic optimization.
 
 ---
 
+## Measured Results
+
+| Change | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| Phase 0.1: Arc<str> | 160ms | 134ms | **16% faster** |
+
+---
+
 ## Phase 0: Quick Wins (Day 1)
 
 **Goal**: Low-effort, high-impact changes
