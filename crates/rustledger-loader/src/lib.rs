@@ -28,9 +28,16 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+#[cfg(feature = "cache")]
+pub mod cache;
 mod options;
 mod source_map;
 
+#[cfg(feature = "cache")]
+pub use cache::{
+    invalidate_cache, load_cache_entry, reintern_directives, save_cache_entry, CacheEntry,
+    CachedOptions, CachedPlugin,
+};
 pub use options::Options;
 pub use source_map::{SourceFile, SourceMap};
 
@@ -295,23 +302,25 @@ impl Loader {
         }
 
         // Read file (decrypting if necessary)
-        let source = if is_encrypted_file(path) {
-            decrypt_gpg_file(path)?
+        let source: std::sync::Arc<str> = if is_encrypted_file(path) {
+            decrypt_gpg_file(path)?.into()
         } else {
-            fs::read_to_string(path).map_err(|e| LoadError::Io {
-                path: path.to_path_buf(),
-                source: e,
-            })?
+            fs::read_to_string(path)
+                .map_err(|e| LoadError::Io {
+                    path: path.to_path_buf(),
+                    source: e,
+                })?
+                .into()
         };
 
-        // Add to source map
-        let file_id = source_map.add_file(path.to_path_buf(), source.clone());
+        // Add to source map (Arc::clone is cheap - just increments refcount)
+        let file_id = source_map.add_file(path.to_path_buf(), std::sync::Arc::clone(&source));
 
         // Mark as loading
         self.include_stack.push(path.to_path_buf());
         self.loaded_files.insert(path.to_path_buf());
 
-        // Parse
+        // Parse (borrows from Arc, no allocation)
         let result = rustledger_parser::parse(&source);
 
         // Collect parse errors

@@ -3,11 +3,16 @@
 use crate::cmd::completions::ShellType;
 use crate::report::{self, SourceCache};
 use anyhow::{Context, Result};
+use chrono::NaiveDate;
 use clap::Parser;
-use rustledger_booking::interpolate;
+use rayon::prelude::*;
+use rustledger_booking::{interpolate, InterpolationError};
 use rustledger_core::Directive;
-use rustledger_loader::{LoadError, Loader};
-#[cfg(feature = "wasm")]
+use rustledger_loader::{
+    load_cache_entry, reintern_directives, save_cache_entry, CacheEntry, CachedOptions,
+    CachedPlugin, LoadError, Loader,
+};
+#[cfg(feature = "python-plugin-wasm")]
 use rustledger_plugin::PluginManager;
 use rustledger_plugin::{wrappers_to_directives, NativePluginRegistry, PluginInput, PluginOptions};
 use rustledger_validate::validate;
@@ -37,12 +42,12 @@ pub struct Args {
     #[arg(short, long)]
     pub quiet: bool,
 
-    /// Disable the cache (accepted for Python beancount compatibility, no effect in rustledger)
+    /// Disable the binary cache for parsed directives
     #[arg(short = 'C', long = "no-cache")]
     pub no_cache: bool,
 
-    /// Override the cache filename (accepted for Python beancount compatibility, no effect in rustledger)
-    #[arg(long, value_name = "CACHE_FILE")]
+    /// Override the cache filename (not yet implemented)
+    #[arg(long, value_name = "CACHE_FILE", hide = true)]
     pub cache_filename: Option<PathBuf>,
 
     /// Implicitly enable auto-plugins (`auto_accounts`, etc.)
@@ -50,7 +55,7 @@ pub struct Args {
     pub auto: bool,
 
     /// Load a WASM plugin (can be specified multiple times)
-    #[cfg(feature = "wasm")]
+    #[cfg(feature = "python-plugin-wasm")]
     #[arg(long = "plugin", value_name = "WASM_FILE")]
     pub plugins: Vec<PathBuf>,
 
@@ -71,15 +76,104 @@ fn run(args: &Args) -> Result<ExitCode> {
         anyhow::bail!("file not found: {}", file.display());
     }
 
-    // Load the file
-    if args.verbose && !args.quiet {
-        eprintln!("Loading {}...", file.display());
-    }
+    // Try loading from cache first (unless --no-cache)
+    let cache_entry = if args.no_cache {
+        None
+    } else {
+        load_cache_entry(file)
+    };
 
-    let mut loader = Loader::new();
-    let load_result = loader
-        .load(file)
-        .with_context(|| format!("failed to load {}", file.display()))?;
+    let (load_result, from_cache) = if let Some(mut entry) = cache_entry {
+        if args.verbose && !args.quiet {
+            eprintln!("Loaded {} directives from cache", entry.directives.len());
+        }
+
+        // Re-intern strings to deduplicate memory
+        let dedup_count = reintern_directives(&mut entry.directives);
+        if args.verbose && !args.quiet {
+            eprintln!("Re-interned strings ({dedup_count} deduplicated)");
+        }
+
+        // Rebuild source map from cached file list
+        let mut source_map = rustledger_loader::SourceMap::new();
+        for path in entry.file_paths() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                source_map.add_file(path, content.into());
+            }
+        }
+
+        // Convert CachedPlugin -> Plugin (span/file_id are not meaningful from cache)
+        let plugins: Vec<rustledger_loader::Plugin> = entry
+            .plugins
+            .iter()
+            .map(|p| rustledger_loader::Plugin {
+                name: p.name.clone(),
+                config: p.config.clone(),
+                span: rustledger_parser::Span::new(0, 0),
+                file_id: 0,
+            })
+            .collect();
+
+        let result = rustledger_loader::LoadResult {
+            directives: entry.directives,
+            options: entry.options.into(),
+            plugins,
+            source_map,
+            errors: Vec::new(),
+        };
+        (result, true)
+    } else {
+        // Load the file normally
+        if args.verbose && !args.quiet {
+            eprintln!("Loading {}...", file.display());
+        }
+
+        let mut loader = Loader::new();
+        let result = loader
+            .load(file)
+            .with_context(|| format!("failed to load {}", file.display()))?;
+
+        // Save to cache (unless --no-cache)
+        if !args.no_cache {
+            // Collect all loaded file paths for cache (as strings for serialization)
+            let files: Vec<String> = result
+                .source_map
+                .files()
+                .iter()
+                .map(|f| f.path.to_string_lossy().into_owned())
+                .collect();
+            let files = if files.is_empty() {
+                vec![file.to_string_lossy().into_owned()]
+            } else {
+                files
+            };
+
+            // Create full cache entry
+            let entry = CacheEntry {
+                directives: result.directives.clone(),
+                options: CachedOptions::from(&result.options),
+                plugins: result
+                    .plugins
+                    .iter()
+                    .map(|p| CachedPlugin {
+                        name: p.name.clone(),
+                        config: p.config.clone(),
+                    })
+                    .collect(),
+                files,
+            };
+
+            if let Err(e) = save_cache_entry(file, &entry) {
+                if args.verbose && !args.quiet {
+                    eprintln!("Warning: failed to save cache: {e}");
+                }
+            } else if args.verbose && !args.quiet {
+                eprintln!("Saved {} directives to cache", result.directives.len());
+            }
+        }
+
+        (result, false)
+    };
 
     // Build source cache for error reporting
     let mut cache = SourceCache::new();
@@ -179,9 +273,9 @@ fn run(args: &Args) -> Result<ExitCode> {
     }
 
     // Run plugins if specified
-    #[cfg(feature = "wasm")]
+    #[cfg(feature = "python-plugin-wasm")]
     let has_wasm_plugins = !args.plugins.is_empty();
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(feature = "python-plugin-wasm"))]
     let has_wasm_plugins = false;
 
     if !native_plugins_to_run.is_empty() || has_wasm_plugins {
@@ -226,7 +320,7 @@ fn run(args: &Args) -> Result<ExitCode> {
             }
         }
 
-        #[cfg(feature = "wasm")]
+        #[cfg(feature = "python-plugin-wasm")]
         if !args.plugins.is_empty() {
             let mut wasm_manager = PluginManager::new();
 
@@ -290,24 +384,27 @@ fn run(args: &Args) -> Result<ExitCode> {
         }
     }
 
-    // Run interpolation on transactions
+    // Run interpolation on transactions (parallel)
     if args.verbose && !args.quiet {
         eprintln!("Interpolating {} directives...", directives.len());
     }
 
-    let mut interpolation_errors = Vec::new();
-    for directive in &mut directives {
-        if let Directive::Transaction(txn) = directive {
-            match interpolate(txn) {
-                Ok(result) => {
-                    *txn = result.transaction;
+    let interpolation_errors: Vec<(NaiveDate, String, InterpolationError)> = directives
+        .par_iter_mut()
+        .filter_map(|directive| {
+            if let Directive::Transaction(txn) = directive {
+                match interpolate(txn) {
+                    Ok(result) => {
+                        *txn = result.transaction;
+                        None
+                    }
+                    Err(e) => Some((txn.date, txn.narration.to_string(), e)),
                 }
-                Err(e) => {
-                    interpolation_errors.push((txn.date, txn.narration.clone(), e));
-                }
+            } else {
+                None
             }
-        }
-    }
+        })
+        .collect();
 
     if !args.quiet && !interpolation_errors.is_empty() {
         for (date, narration, err) in &interpolation_errors {
@@ -336,10 +433,12 @@ fn run(args: &Args) -> Result<ExitCode> {
     let elapsed = start.elapsed();
     if !args.quiet {
         if args.verbose {
+            let cache_note = if from_cache { " (from cache)" } else { "" };
             writeln!(
                 stdout,
-                "\nChecked in {:.2}ms",
-                elapsed.as_secs_f64() * 1000.0
+                "\nChecked in {:.2}ms{}",
+                elapsed.as_secs_f64() * 1000.0,
+                cache_note
             )?;
         }
         report::print_summary(error_count, 0, &mut stdout)?;

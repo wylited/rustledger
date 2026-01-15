@@ -15,6 +15,11 @@ readme = "../../README.md"
 [lib]
 bench = false
 
+[features]
+default = ["rkyv"]
+# Enable rkyv serialization for binary cache
+rkyv = ["dep:rkyv", "rustledger-core/rkyv"]
+
 [dependencies]
 rustledger-core.workspace = true
 chumsky.workspace = true
@@ -23,6 +28,7 @@ rust_decimal.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
 serde.workspace = true
+rkyv = { workspace = true, optional = true }
 
 [dev-dependencies]
 rust_decimal_macros = "1.36"

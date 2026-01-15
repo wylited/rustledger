@@ -24,10 +24,10 @@ pub fn directive_to_json(directive: &Directive) -> DirectiveJson {
         Directive::Transaction(txn) => DirectiveJson::Transaction {
             date: txn.date.to_string(),
             flag: txn.flag.to_string(),
-            payee: txn.payee.clone(),
-            narration: Some(txn.narration.clone()),
-            tags: txn.tags.clone(),
-            links: txn.links.clone(),
+            payee: txn.payee.as_ref().map(ToString::to_string),
+            narration: Some(txn.narration.to_string()),
+            tags: txn.tags.iter().map(ToString::to_string).collect(),
+            links: txn.links.iter().map(ToString::to_string).collect(),
             postings: txn
                 .postings
                 .iter()

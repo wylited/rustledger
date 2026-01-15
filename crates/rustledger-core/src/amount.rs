@@ -10,6 +10,8 @@ use std::fmt;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 use crate::intern::InternedStr;
+#[cfg(feature = "rkyv")]
+use crate::intern::{AsDecimal, AsInternedStr};
 
 /// An amount is a quantity paired with a currency.
 ///
@@ -29,10 +31,16 @@ use crate::intern::InternedStr;
 /// assert_eq!(sum.number, dec!(150.00));
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Amount {
     /// The decimal quantity
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsDecimal))]
     pub number: Decimal,
     /// The currency code (e.g., "USD", "EUR", "AAPL")
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub currency: InternedStr,
 }
 
@@ -282,13 +290,17 @@ impl SubAssign<&Self> for Amount {
 ///
 /// This type represents all these cases before the interpolation phase.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum IncompleteAmount {
     /// Complete amount with both number and currency
     Complete(Amount),
     /// Only number specified, currency to be inferred from context (cost, price, or other postings)
-    NumberOnly(Decimal),
+    NumberOnly(#[cfg_attr(feature = "rkyv", rkyv(with = AsDecimal))] Decimal),
     /// Only currency specified, number to be interpolated to balance the transaction
-    CurrencyOnly(InternedStr),
+    CurrencyOnly(#[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))] InternedStr),
 }
 
 impl IncompleteAmount {

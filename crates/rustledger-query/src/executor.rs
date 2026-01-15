@@ -516,8 +516,12 @@ impl<'a> Executor<'a> {
                         let row = vec![
                             Value::Date(txn.date),
                             Value::String(txn.flag.to_string()),
-                            Value::String(txn.payee.clone().unwrap_or_default()),
-                            Value::String(txn.narration.clone()),
+                            Value::String(
+                                txn.payee
+                                    .as_ref()
+                                    .map_or_else(String::new, ToString::to_string),
+                            ),
+                            Value::String(txn.narration.to_string()),
                             Value::String(posting.account.to_string()),
                             position_value,
                             Value::Inventory(balance.clone()),
@@ -927,15 +931,27 @@ impl<'a> Executor<'a> {
         match name {
             "date" => Ok(Value::Date(ctx.transaction.date)),
             "account" => Ok(Value::String(posting.account.to_string())),
-            "narration" => Ok(Value::String(ctx.transaction.narration.clone())),
+            "narration" => Ok(Value::String(ctx.transaction.narration.to_string())),
             "payee" => Ok(ctx
                 .transaction
                 .payee
-                .clone()
-                .map_or(Value::Null, Value::String)),
+                .as_ref()
+                .map_or(Value::Null, |p| Value::String(p.to_string()))),
             "flag" => Ok(Value::String(ctx.transaction.flag.to_string())),
-            "tags" => Ok(Value::StringSet(ctx.transaction.tags.clone())),
-            "links" => Ok(Value::StringSet(ctx.transaction.links.clone())),
+            "tags" => Ok(Value::StringSet(
+                ctx.transaction
+                    .tags
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )),
+            "links" => Ok(Value::StringSet(
+                ctx.transaction
+                    .links
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect(),
+            )),
             "position" | "units" => Ok(posting
                 .amount()
                 .map_or(Value::Null, |u| Value::Amount(u.clone()))),
@@ -1982,10 +1998,10 @@ impl<'a> Executor<'a> {
                 row.push(
                     ctx.transaction
                         .payee
-                        .clone()
-                        .map_or(Value::Null, Value::String),
+                        .as_ref()
+                        .map_or(Value::Null, |p| Value::String(p.to_string())),
                 );
-                row.push(Value::String(ctx.transaction.narration.clone()));
+                row.push(Value::String(ctx.transaction.narration.to_string()));
                 let posting = &ctx.transaction.postings[ctx.posting_index];
                 row.push(Value::String(posting.account.to_string()));
                 row.push(

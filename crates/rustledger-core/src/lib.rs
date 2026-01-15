@@ -65,3 +65,7 @@ pub use position::Position;
 // Re-export commonly used external types
 pub use chrono::NaiveDate;
 pub use rust_decimal::Decimal;
+
+// Re-export rkyv wrappers when feature is enabled
+#[cfg(feature = "rkyv")]
+pub use intern::{AsDecimal, AsInternedStr, AsNaiveDate};

@@ -45,10 +45,14 @@ spec/fixtures/python-tests/
 # Benchmark results
 target/criterion/
 
+# Binary cache files (rustledger)
+*.beancount.cache
+
 # Local development
 .env
 .env.local
 *.local
+.claude/
 
 # Logs
 *.log

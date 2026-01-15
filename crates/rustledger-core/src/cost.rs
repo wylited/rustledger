@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 use crate::intern::InternedStr;
+#[cfg(feature = "rkyv")]
+use crate::intern::{AsDecimal, AsInternedStr, AsNaiveDate};
 use crate::Amount;
 
 /// A cost represents the acquisition cost of a position (lot).
@@ -37,12 +39,19 @@ use crate::Amount;
 /// assert!(cost.date.is_some());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Cost {
     /// Cost per unit
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsDecimal))]
     pub number: Decimal,
     /// Currency of the cost
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub currency: InternedStr,
     /// Acquisition date (optional, for lot identification)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsNaiveDate>))]
     pub date: Option<NaiveDate>,
     /// Lot label (optional, for explicit lot identification)
     pub label: Option<String>,
@@ -133,14 +142,22 @@ impl fmt::Display for Cost {
 /// assert!(!spec2.matches(&cost));
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct CostSpec {
     /// Cost per unit (if specified)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsDecimal>))]
     pub number_per: Option<Decimal>,
     /// Total cost (if specified) - alternative to `number_per`
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsDecimal>))]
     pub number_total: Option<Decimal>,
     /// Currency of the cost (if specified)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsInternedStr>))]
     pub currency: Option<InternedStr>,
     /// Acquisition date (if specified)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsNaiveDate>))]
     pub date: Option<NaiveDate>,
     /// Lot label (if specified)
     pub label: Option<String>,

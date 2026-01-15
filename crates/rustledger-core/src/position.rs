@@ -38,6 +38,10 @@ use crate::{Amount, Cost, CostSpec};
 /// assert!(stock.cost.is_some());
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Position {
     /// The units held (number + currency/commodity)
     pub units: Amount,

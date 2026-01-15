@@ -82,8 +82,8 @@ fn test_parse_simple_transaction() {
     assert_eq!(count_directive_type(&result, "transaction"), 1);
 
     if let Directive::Transaction(txn) = &result.directives[0].value {
-        assert_eq!(txn.payee, Some("Coffee Shop".to_string()));
-        assert_eq!(txn.narration, "Morning coffee");
+        assert_eq!(txn.payee.as_deref(), Some("Coffee Shop"));
+        assert_eq!(txn.narration.as_str(), "Morning coffee");
         assert_eq!(txn.postings.len(), 2);
     } else {
         panic!("expected transaction");
@@ -101,9 +101,9 @@ fn test_parse_transaction_with_tags_and_links() {
     assert_eq!(count_directive_type(&result, "transaction"), 1);
 
     if let Directive::Transaction(txn) = &result.directives[0].value {
-        assert!(txn.tags.contains(&"food".to_string()));
-        assert!(txn.tags.contains(&"restaurant".to_string()));
-        assert!(txn.links.contains(&"receipt-123".to_string()));
+        assert!(txn.tags.iter().any(|t| t.as_str() == "food"));
+        assert!(txn.tags.iter().any(|t| t.as_str() == "restaurant"));
+        assert!(txn.links.iter().any(|l| l.as_str() == "receipt-123"));
     } else {
         panic!("expected transaction");
     }
@@ -487,8 +487,8 @@ fn test_parse_unicode_in_narration() {
     assert_eq!(count_directive_type(&result, "transaction"), 1);
 
     if let Directive::Transaction(txn) = &result.directives[0].value {
-        assert_eq!(txn.payee, Some("Café ☕".to_string()));
-        assert_eq!(txn.narration, "Latte mit Milch");
+        assert_eq!(txn.payee.as_deref(), Some("Café ☕"));
+        assert_eq!(txn.narration.as_str(), "Latte mit Milch");
     } else {
         panic!("expected transaction");
     }

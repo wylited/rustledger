@@ -6,6 +6,10 @@ use std::ops::Range;
 
 /// A span in the source code, represented as a byte range.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Span {
     /// Start byte offset (inclusive).
     pub start: usize,
@@ -83,6 +87,10 @@ impl fmt::Display for Span {
 
 /// A value with an associated source span.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Spanned<T> {
     /// The value.
     pub value: T,

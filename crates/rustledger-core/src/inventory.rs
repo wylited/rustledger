@@ -16,6 +16,10 @@ use crate::{Amount, CostSpec, Position};
 
 /// Booking method determines how lots are matched when reducing positions.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum BookingMethod {
     /// Lots must match exactly (unambiguous).
     /// If multiple lots match the cost spec, an error is raised.
@@ -167,6 +171,10 @@ impl std::error::Error for BookingError {}
 /// assert_eq!(inv.units("AAPL"), dec!(10));
 /// ```
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Inventory {
     positions: Vec<Position>,
 }

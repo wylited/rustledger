@@ -81,10 +81,10 @@ pub fn directive_to_wrapper(directive: &Directive) -> DirectiveWrapper {
 fn transaction_to_data(txn: &Transaction) -> TransactionData {
     TransactionData {
         flag: txn.flag.to_string(),
-        payee: txn.payee.clone(),
-        narration: txn.narration.clone(),
-        tags: txn.tags.clone(),
-        links: txn.links.clone(),
+        payee: txn.payee.as_ref().map(ToString::to_string),
+        narration: txn.narration.to_string(),
+        tags: txn.tags.iter().map(ToString::to_string).collect(),
+        links: txn.links.iter().map(ToString::to_string).collect(),
         metadata: txn
             .meta
             .iter()
@@ -356,10 +356,10 @@ fn data_to_transaction(
     Ok(Transaction {
         date,
         flag,
-        payee: data.payee.clone(),
-        narration: data.narration.clone(),
-        tags: data.tags.clone(),
-        links: data.links.clone(),
+        payee: data.payee.as_ref().map(|p| p.as_str().into()),
+        narration: data.narration.as_str().into(),
+        tags: data.tags.iter().map(|t| t.as_str().into()).collect(),
+        links: data.links.iter().map(|l| l.as_str().into()).collect(),
         meta,
         postings,
     })
@@ -661,10 +661,10 @@ mod tests {
         let txn = Transaction {
             date,
             flag: '*',
-            payee: Some("Grocery Store".to_string()),
-            narration: "Weekly groceries".to_string(),
-            tags: vec!["food".to_string()],
-            links: vec!["grocery-2024".to_string()],
+            payee: Some("Grocery Store".into()),
+            narration: "Weekly groceries".into(),
+            tags: vec!["food".into()],
+            links: vec!["grocery-2024".into()],
             meta: HashMap::new(),
             postings: vec![
                 Posting {

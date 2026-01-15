@@ -743,3 +743,80 @@ fn test_execute_window_with_partition_by() {
     assert!(!result.is_empty());
     // Each partition should have its own row numbering starting from 1
 }
+
+// ============================================================================
+// Tags and Links Tests
+// ============================================================================
+
+#[test]
+fn test_select_tags() {
+    let directives = make_test_directives();
+    // Transaction 2 has tag "food"
+    let result = execute_query(
+        r#"SELECT date, narration, tags WHERE "food" IN tags"#,
+        &directives,
+    );
+
+    assert!(!result.is_empty());
+    assert_eq!(result.columns.len(), 3);
+    // Should find the groceries transaction
+    for row in &result.rows {
+        if let Value::StringSet(tags) = &row[2] {
+            assert!(
+                tags.contains(&"food".to_string()),
+                "expected 'food' in tags"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_select_links() {
+    // Create directives with a linked transaction
+    let directives = vec![
+        Directive::Open(Open::new(date(2024, 1, 1), "Assets:Bank")),
+        Directive::Open(Open::new(date(2024, 1, 1), "Expenses:Food")),
+        Directive::Transaction(
+            Transaction::new(date(2024, 1, 15), "Linked transaction")
+                .with_link("invoice-123")
+                .with_posting(Posting::new("Expenses:Food", Amount::new(dec!(100), "USD")))
+                .with_posting(Posting::new("Assets:Bank", Amount::new(dec!(-100), "USD"))),
+        ),
+    ];
+
+    let result = execute_query(
+        r#"SELECT date, narration, links WHERE "invoice-123" IN links"#,
+        &directives,
+    );
+
+    assert!(!result.is_empty());
+    assert_eq!(result.columns.len(), 3);
+    for row in &result.rows {
+        if let Value::StringSet(links) = &row[2] {
+            assert!(
+                links.contains(&"invoice-123".to_string()),
+                "expected 'invoice-123' in links"
+            );
+        }
+    }
+}
+
+#[test]
+fn test_select_payee_and_narration() {
+    let directives = make_test_directives();
+    let result = execute_query(
+        r#"SELECT date, payee, narration WHERE payee = "Grocery Store""#,
+        &directives,
+    );
+
+    assert!(!result.is_empty());
+    for row in &result.rows {
+        if let Value::String(payee) = &row[1] {
+            assert_eq!(payee, "Grocery Store");
+        }
+        // Just verify narration is a non-empty string
+        if let Value::String(narration) = &row[2] {
+            assert!(!narration.is_empty(), "narration should not be empty");
+        }
+    }
+}

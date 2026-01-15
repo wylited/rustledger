@@ -22,10 +22,16 @@ use std::collections::HashMap;
 use std::fmt;
 
 use crate::intern::InternedStr;
+#[cfg(feature = "rkyv")]
+use crate::intern::{AsDecimal, AsInternedStr, AsNaiveDate, AsOptionInternedStr, AsVecInternedStr};
 use crate::{Amount, CostSpec, IncompleteAmount};
 
 /// Metadata value types.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum MetaValue {
     /// String value
     String(String),
@@ -38,9 +44,9 @@ pub enum MetaValue {
     /// Link reference
     Link(String),
     /// Date value
-    Date(NaiveDate),
+    Date(#[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))] NaiveDate),
     /// Numeric value
-    Number(Decimal),
+    Number(#[cfg_attr(feature = "rkyv", rkyv(with = AsDecimal))] Decimal),
     /// Boolean value
     Bool(bool),
     /// Amount value
@@ -79,8 +85,13 @@ pub type Metadata = HashMap<String, MetaValue>;
 /// `Some(IncompleteAmount)`, it may still have missing components that
 /// need to be filled in.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Posting {
     /// The account for this posting
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// The units (may be incomplete or None for auto-calculated postings)
     pub units: Option<IncompleteAmount>,
@@ -193,6 +204,10 @@ impl fmt::Display for Posting {
 /// Price annotations can be incomplete (missing number or currency)
 /// before interpolation fills in the missing values.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum PriceAnnotation {
     /// Per-unit price (@) with complete amount
     Unit(Amount),
@@ -276,6 +291,10 @@ pub enum DirectivePriority {
 
 /// All directive types in beancount.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub enum Directive {
     /// Transaction directive - records transfers between accounts
     Transaction(Transaction),
@@ -417,19 +436,28 @@ pub fn sort_directives(directives: &mut [Directive]) {
 /// Transactions are the most common directive type. They record transfers
 /// between accounts and must balance (sum of all postings equals zero).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Transaction {
     /// Transaction date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Transaction flag (* or !)
     pub flag: char,
     /// Payee (optional)
-    pub payee: Option<String>,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsOptionInternedStr))]
+    pub payee: Option<InternedStr>,
     /// Narration (description)
-    pub narration: String,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
+    pub narration: InternedStr,
     /// Tags attached to this transaction
-    pub tags: Vec<String>,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsVecInternedStr))]
+    pub tags: Vec<InternedStr>,
     /// Links attached to this transaction
-    pub links: Vec<String>,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsVecInternedStr))]
+    pub links: Vec<InternedStr>,
     /// Transaction metadata
     pub meta: Metadata,
     /// Postings (account entries)
@@ -439,7 +467,7 @@ pub struct Transaction {
 impl Transaction {
     /// Create a new transaction.
     #[must_use]
-    pub fn new(date: NaiveDate, narration: impl Into<String>) -> Self {
+    pub fn new(date: NaiveDate, narration: impl Into<InternedStr>) -> Self {
         Self {
             date,
             flag: '*',
@@ -461,21 +489,21 @@ impl Transaction {
 
     /// Set the payee.
     #[must_use]
-    pub fn with_payee(mut self, payee: impl Into<String>) -> Self {
+    pub fn with_payee(mut self, payee: impl Into<InternedStr>) -> Self {
         self.payee = Some(payee.into());
         self
     }
 
     /// Add a tag.
     #[must_use]
-    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+    pub fn with_tag(mut self, tag: impl Into<InternedStr>) -> Self {
         self.tags.push(tag.into());
         self
     }
 
     /// Add a link.
     #[must_use]
-    pub fn with_link(mut self, link: impl Into<String>) -> Self {
+    pub fn with_link(mut self, link: impl Into<InternedStr>) -> Self {
         self.links.push(link.into());
         self
     }
@@ -594,14 +622,21 @@ impl fmt::Display for Transaction {
 ///
 /// Asserts that an account has a specific balance at the beginning of a date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Balance {
     /// Assertion date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account to check
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// Expected amount
     pub amount: Amount,
     /// Tolerance (if explicitly specified)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsDecimal>))]
     pub tolerance: Option<Decimal>,
     /// Metadata
     pub meta: Metadata,
@@ -649,12 +684,19 @@ impl fmt::Display for Balance {
 ///
 /// Opens an account for use. Accounts must be opened before they can be used.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Open {
     /// Date account was opened
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account name (e.g., "Assets:Bank:Checking")
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// Allowed currencies (empty = any currency allowed)
+    #[cfg_attr(feature = "rkyv", rkyv(with = rkyv::with::Map<AsInternedStr>))]
     pub currencies: Vec<InternedStr>,
     /// Booking method for this account
     pub booking: Option<String>,
@@ -715,10 +757,16 @@ impl fmt::Display for Open {
 ///
 /// Closes an account. The account should have zero balance when closed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Close {
     /// Date account was closed
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account name
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// Metadata
     pub meta: Metadata,
@@ -753,10 +801,16 @@ impl fmt::Display for Close {
 ///
 /// Declares a commodity/currency that can be used in the ledger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Commodity {
     /// Declaration date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Currency/commodity code (e.g., "USD", "AAPL")
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub currency: InternedStr,
     /// Metadata
     pub meta: Metadata,
@@ -792,12 +846,19 @@ impl fmt::Display for Commodity {
 /// Automatically inserts a transaction to pad an account to match
 /// a subsequent balance assertion.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Pad {
     /// Pad date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account to pad
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// Source account for padding (e.g., Equity:Opening-Balances)
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub source_account: InternedStr,
     /// Metadata
     pub meta: Metadata,
@@ -841,8 +902,13 @@ impl fmt::Display for Pad {
 ///
 /// Records a life event (e.g., location changes, employment changes).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Event {
     /// Event date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Event type (e.g., "location", "employer")
     pub event_type: String,
@@ -886,8 +952,13 @@ impl fmt::Display for Event {
 ///
 /// Stores a named BQL query that can be referenced later.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Query {
     /// Query date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Query name
     pub name: String,
@@ -931,10 +1002,16 @@ impl fmt::Display for Query {
 ///
 /// Adds a note/comment to an account on a specific date.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Note {
     /// Note date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// Note text
     pub comment: String,
@@ -980,17 +1057,25 @@ impl fmt::Display for Note {
 ///
 /// Links an external document file to an account.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Document {
     /// Document date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Account
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub account: InternedStr,
     /// File path to the document
     pub path: String,
     /// Tags
-    pub tags: Vec<String>,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsVecInternedStr))]
+    pub tags: Vec<InternedStr>,
     /// Links
-    pub links: Vec<String>,
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsVecInternedStr))]
+    pub links: Vec<InternedStr>,
     /// Metadata
     pub meta: Metadata,
 }
@@ -1011,14 +1096,14 @@ impl Document {
 
     /// Add a tag.
     #[must_use]
-    pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
+    pub fn with_tag(mut self, tag: impl Into<InternedStr>) -> Self {
         self.tags.push(tag.into());
         self
     }
 
     /// Add a link.
     #[must_use]
-    pub fn with_link(mut self, link: impl Into<String>) -> Self {
+    pub fn with_link(mut self, link: impl Into<InternedStr>) -> Self {
         self.links.push(link.into());
         self
     }
@@ -1045,10 +1130,16 @@ impl fmt::Display for Document {
 ///
 /// Records the price of a commodity in another currency.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Price {
     /// Price date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Currency being priced
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsInternedStr))]
     pub currency: InternedStr,
     /// Price amount (in another currency)
     pub amount: Amount,
@@ -1086,8 +1177,13 @@ impl fmt::Display for Price {
 ///
 /// User-defined directive type for extensions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
 pub struct Custom {
     /// Custom directive date
+    #[cfg_attr(feature = "rkyv", rkyv(with = AsNaiveDate))]
     pub date: NaiveDate,
     /// Custom type name (e.g., "budget", "autopay")
     pub custom_type: String,
@@ -1156,7 +1252,7 @@ mod tests {
             .with_posting(Posting::auto("Assets:Checking"));
 
         assert_eq!(txn.flag, '*');
-        assert_eq!(txn.payee, Some("Whole Foods".to_string()));
+        assert_eq!(txn.payee.as_deref(), Some("Whole Foods"));
         assert_eq!(txn.postings.len(), 2);
         assert!(txn.is_complete());
     }

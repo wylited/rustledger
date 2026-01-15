@@ -35,6 +35,67 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 #[derive(Debug, Clone, Eq)]
 pub struct InternedStr(Arc<str>);
 
+// rkyv support: use AsString wrapper to serialize as String
+#[cfg(feature = "rkyv")]
+pub use rkyv_impl::AsInternedStr;
+
+/// Type alias for rkyv wrapper for `Option<InternedStr>`.
+/// Use: `#[rkyv(with = rkyv::with::Map<AsInternedStr>)]`
+#[cfg(feature = "rkyv")]
+pub type AsOptionInternedStr = rkyv::with::Map<AsInternedStr>;
+
+/// Type alias for rkyv wrapper for `Vec<InternedStr>`.
+/// Use: `#[rkyv(with = rkyv::with::Map<AsInternedStr>)]`
+#[cfg(feature = "rkyv")]
+pub type AsVecInternedStr = rkyv::with::Map<AsInternedStr>;
+
+#[cfg(feature = "rkyv")]
+mod rkyv_impl {
+    use super::InternedStr;
+    use rkyv::rancor::Fallible;
+    use rkyv::string::ArchivedString;
+    use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+    use rkyv::Place;
+
+    /// Wrapper to serialize `InternedStr` as String with rkyv.
+    /// Use with `#[rkyv(with = AsInternedStr)]` on `InternedStr` fields.
+    pub struct AsInternedStr;
+
+    impl ArchiveWith<InternedStr> for AsInternedStr {
+        type Archived = ArchivedString;
+        type Resolver = rkyv::string::StringResolver;
+
+        fn resolve_with(field: &InternedStr, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            ArchivedString::resolve_from_str(field.as_str(), resolver, out);
+        }
+    }
+
+    impl<S> SerializeWith<InternedStr, S> for AsInternedStr
+    where
+        S: Fallible + rkyv::ser::Writer + rkyv::ser::Allocator + ?Sized,
+        S::Error: rkyv::rancor::Source,
+    {
+        fn serialize_with(
+            field: &InternedStr,
+            serializer: &mut S,
+        ) -> Result<Self::Resolver, S::Error> {
+            ArchivedString::serialize_from_str(field.as_str(), serializer)
+        }
+    }
+
+    impl<D> DeserializeWith<ArchivedString, InternedStr, D> for AsInternedStr
+    where
+        D: Fallible + ?Sized,
+    {
+        fn deserialize_with(
+            field: &ArchivedString,
+            _deserializer: &mut D,
+        ) -> Result<InternedStr, D::Error> {
+            Ok(InternedStr::new(field.as_str()))
+        }
+    }
+}
+
 impl Serialize for InternedStr {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)
@@ -468,5 +529,107 @@ mod tests {
 
         // s2 should find the same entry as s1
         assert_eq!(map.get(&s2), Some(&1));
+    }
+}
+
+// rkyv wrapper for rust_decimal::Decimal - serialize as fixed 16 bytes
+#[cfg(feature = "rkyv")]
+pub use rkyv_decimal::AsDecimal;
+
+#[cfg(feature = "rkyv")]
+mod rkyv_decimal {
+    use rkyv::rancor::Fallible;
+    use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+    use rkyv::Place;
+    use rust_decimal::Decimal;
+
+    /// Wrapper to serialize `Decimal` as fixed 16-byte binary with rkyv.
+    /// This is more compact and faster than string serialization.
+    pub struct AsDecimal;
+
+    impl ArchiveWith<Decimal> for AsDecimal {
+        type Archived = [u8; 16];
+        type Resolver = [(); 16];
+
+        fn resolve_with(field: &Decimal, resolver: Self::Resolver, out: Place<Self::Archived>) {
+            let bytes = field.serialize();
+            // Use rkyv's Archive impl for [u8; 16] which handles this safely
+            rkyv::Archive::resolve(&bytes, resolver, out);
+        }
+    }
+
+    impl<S> SerializeWith<Decimal, S> for AsDecimal
+    where
+        S: Fallible + ?Sized,
+    {
+        fn serialize_with(
+            _field: &Decimal,
+            _serializer: &mut S,
+        ) -> Result<Self::Resolver, S::Error> {
+            // No extra serialization needed - data is inlined
+            Ok([(); 16])
+        }
+    }
+
+    impl<D> DeserializeWith<[u8; 16], Decimal, D> for AsDecimal
+    where
+        D: Fallible + ?Sized,
+    {
+        fn deserialize_with(field: &[u8; 16], _deserializer: &mut D) -> Result<Decimal, D::Error> {
+            Ok(Decimal::deserialize(*field))
+        }
+    }
+}
+
+// rkyv wrapper for chrono::NaiveDate - serialize as i32 (days from CE)
+#[cfg(feature = "rkyv")]
+pub use rkyv_date::AsNaiveDate;
+
+#[cfg(feature = "rkyv")]
+mod rkyv_date {
+    use chrono::{Datelike, NaiveDate};
+    use rkyv::rancor::Fallible;
+    use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
+    use rkyv::Place;
+
+    /// Wrapper to serialize `NaiveDate` as i32 (days from Common Era) with rkyv.
+    /// This is 4 bytes instead of 10+ for string, and faster to serialize.
+    pub struct AsNaiveDate;
+
+    impl ArchiveWith<NaiveDate> for AsNaiveDate {
+        type Archived = rkyv::Archived<i32>;
+        type Resolver = ();
+
+        fn resolve_with(field: &NaiveDate, _resolver: Self::Resolver, out: Place<Self::Archived>) {
+            let days = field.num_days_from_ce();
+            // Use rkyv's Archive impl for i32 which handles endianness
+            rkyv::Archive::resolve(&days, (), out);
+        }
+    }
+
+    impl<S> SerializeWith<NaiveDate, S> for AsNaiveDate
+    where
+        S: Fallible + ?Sized,
+    {
+        fn serialize_with(
+            _field: &NaiveDate,
+            _serializer: &mut S,
+        ) -> Result<Self::Resolver, S::Error> {
+            // No extra serialization needed - data is inlined
+            Ok(())
+        }
+    }
+
+    impl<D> DeserializeWith<rkyv::Archived<i32>, NaiveDate, D> for AsNaiveDate
+    where
+        D: Fallible + ?Sized,
+    {
+        fn deserialize_with(
+            field: &rkyv::Archived<i32>,
+            _deserializer: &mut D,
+        ) -> Result<NaiveDate, D::Error> {
+            let days = field.to_native();
+            Ok(NaiveDate::from_num_days_from_ce_opt(days).expect("valid date"))
+        }
     }
 }

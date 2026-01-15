@@ -1044,10 +1044,10 @@ fn report_journal<W: Write>(
             writeln!(writer)?;
 
             for txn in &entries_to_show {
-                let payee = txn.payee.as_deref().unwrap_or("");
-                let narration = &txn.narration;
+                let payee = txn.payee.as_ref().map_or("", |p| p.as_str());
+                let narration = txn.narration.as_str();
                 let desc = if payee.is_empty() {
-                    narration.clone()
+                    narration.to_string()
                 } else {
                     format!("{payee} | {narration}")
                 };

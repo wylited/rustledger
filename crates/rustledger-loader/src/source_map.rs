@@ -2,6 +2,7 @@
 
 use rustledger_parser::Span;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 /// A source file in the source map.
 #[derive(Debug, Clone)]
@@ -10,15 +11,15 @@ pub struct SourceFile {
     pub id: usize,
     /// Path to the file.
     pub path: PathBuf,
-    /// Source content.
-    pub source: String,
+    /// Source content (shared via Arc to avoid cloning).
+    pub source: Arc<str>,
     /// Line start offsets (byte positions where each line starts).
     line_starts: Vec<usize>,
 }
 
 impl SourceFile {
     /// Create a new source file.
-    fn new(id: usize, path: PathBuf, source: String) -> Self {
+    fn new(id: usize, path: PathBuf, source: Arc<str>) -> Self {
         let line_starts = std::iter::once(0)
             .chain(source.match_indices('\n').map(|(i, _)| i + 1))
             .collect();
@@ -91,7 +92,7 @@ impl SourceMap {
     /// Add a file to the source map.
     ///
     /// Returns the file ID.
-    pub fn add_file(&mut self, path: PathBuf, source: String) -> usize {
+    pub fn add_file(&mut self, path: PathBuf, source: Arc<str>) -> usize {
         let id = self.files.len();
         self.files.push(SourceFile::new(id, path, source));
         id
@@ -133,8 +134,8 @@ mod tests {
 
     #[test]
     fn test_line_col() {
-        let source = "line 1\nline 2\nline 3";
-        let file = SourceFile::new(0, PathBuf::from("test.beancount"), source.to_string());
+        let source: Arc<str> = "line 1\nline 2\nline 3".into();
+        let file = SourceFile::new(0, PathBuf::from("test.beancount"), source);
 
         assert_eq!(file.line_col(0), (1, 1)); // Start of line 1
         assert_eq!(file.line_col(5), (1, 6)); // "1" in line 1
@@ -144,8 +145,8 @@ mod tests {
 
     #[test]
     fn test_get_line() {
-        let source = "line 1\nline 2\nline 3";
-        let file = SourceFile::new(0, PathBuf::from("test.beancount"), source.to_string());
+        let source: Arc<str> = "line 1\nline 2\nline 3".into();
+        let file = SourceFile::new(0, PathBuf::from("test.beancount"), source);
 
         assert_eq!(file.line(1), Some("line 1"));
         assert_eq!(file.line(2), Some("line 2"));
@@ -157,7 +158,7 @@ mod tests {
     #[test]
     fn test_source_map() {
         let mut sm = SourceMap::new();
-        let id = sm.add_file(PathBuf::from("test.beancount"), "content".to_string());
+        let id = sm.add_file(PathBuf::from("test.beancount"), "content".into());
 
         assert_eq!(id, 0);
         assert!(sm.get(0).is_some());

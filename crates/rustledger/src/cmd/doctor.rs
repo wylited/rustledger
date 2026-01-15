@@ -303,12 +303,11 @@ fn cmd_linked<W: Write>(file: &PathBuf, location: &str, writer: &mut W) -> Resul
 
     let linked: Vec<_> = if let Some(link_name) = location.strip_prefix('^') {
         // Link name
-        let link = link_name.to_string();
         directives
             .iter()
             .filter(|d| {
                 if let Directive::Transaction(txn) = d {
-                    txn.links.contains(&link)
+                    txn.links.iter().any(|l| l.as_str() == link_name)
                 } else {
                     false
                 }
@@ -317,12 +316,11 @@ fn cmd_linked<W: Write>(file: &PathBuf, location: &str, writer: &mut W) -> Resul
             .collect()
     } else if let Some(tag_name) = location.strip_prefix('#') {
         // Tag name
-        let tag = tag_name.to_string();
         directives
             .iter()
             .filter(|d| {
                 if let Directive::Transaction(txn) = d {
-                    txn.tags.contains(&tag)
+                    txn.tags.iter().any(|t| t.as_str() == tag_name)
                 } else {
                     false
                 }
@@ -341,7 +339,7 @@ fn cmd_linked<W: Write>(file: &PathBuf, location: &str, writer: &mut W) -> Resul
         for spanned in &load_result.directives {
             if spanned.span.start <= line && spanned.span.end >= line {
                 if let Directive::Transaction(txn) = &spanned.value {
-                    links_to_find.extend(txn.links.iter().cloned());
+                    links_to_find.extend(txn.links.iter().map(ToString::to_string));
                 }
             }
         }
@@ -355,7 +353,7 @@ fn cmd_linked<W: Write>(file: &PathBuf, location: &str, writer: &mut W) -> Resul
             .iter()
             .filter(|d| {
                 if let Directive::Transaction(txn) = d {
-                    txn.links.iter().any(|l| links_to_find.contains(l))
+                    txn.links.iter().any(|l| links_to_find.contains(l.as_str()))
                 } else {
                     false
                 }

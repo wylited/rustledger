@@ -12,14 +12,23 @@ categories.workspace = true
 authors.workspace = true
 readme = "../../README.md"
 
+[features]
+default = ["cache"]
+# Enable rkyv-based binary caching for faster loads
+cache = ["dep:rkyv", "dep:sha2", "rustledger-parser/rkyv"]
+
 [dependencies]
 rustledger-core.workspace = true
 rustledger-parser.workspace = true
 rust_decimal.workspace = true
 thiserror.workspace = true
+rkyv = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true
 
 [lints]
 workspace = true

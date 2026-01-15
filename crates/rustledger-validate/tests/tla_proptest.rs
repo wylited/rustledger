@@ -78,7 +78,7 @@ proptest! {
                 date: open_date,
                 flag: '*',
                 payee: None,
-                narration: "Initial deposit".to_string(),
+                narration: "Initial deposit".into(),
                 tags: vec![],
                 links: vec![],
                 postings: vec![
@@ -154,7 +154,7 @@ proptest! {
                 date: open_date,
                 flag: '*',
                 payee: None,
-                narration: "Initial deposit".to_string(),
+                narration: "Initial deposit".into(),
                 tags: vec![],
                 links: vec![],
                 postings: vec![
@@ -226,7 +226,7 @@ proptest! {
                 date: txn_date,
                 flag: '*',
                 payee: None,
-                narration: format!("Deposit {}", i + 1),
+                narration: format!("Deposit {}", i + 1).into(),
                 tags: vec![],
                 links: vec![],
                 postings: vec![
@@ -293,7 +293,7 @@ proptest! {
                 date,
                 flag: '*',
                 payee: None,
-                narration: "Test transaction".to_string(),
+                narration: "Test transaction".into(),
                 tags: vec![],
                 links: vec![],
                 postings: vec![
