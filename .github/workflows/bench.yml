@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write  # To update benchmark results
+  contents: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -33,15 +33,15 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install Python beancount
-        run: pip install beancount
+      - name: Install dependencies
+        run: |
+          pip install beancount matplotlib
 
       - name: Build rustledger
         run: cargo build --release -p rustledger
 
       - name: Generate test ledger
         run: |
-          # Generate a reproducible test ledger with 10K transactions
           python3 << 'EOF'
           import random
           from datetime import date, timedelta
@@ -68,36 +68,25 @@ jobs:
 
           with open("benchmark.beancount", "w") as f:
               f.write('option "operating_currency" "USD"\n\n')
-
-              # Open accounts
               for acc in accounts:
                   f.write(f"2020-01-01 open {acc}\n")
               f.write("\n")
 
-              # Generate 10K transactions
               start_date = date(2020, 1, 1)
               for i in range(10000):
                   d = start_date + timedelta(days=i // 10)
                   amount = round(random.uniform(5, 500), 2)
                   expense = random.choice([a for a in accounts if a.startswith("Expenses:")])
                   source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
-                  payee = f"Payee {i % 100}"
-                  narration = f"Transaction {i}"
-
-                  f.write(f'{d} * "{payee}" "{narration}"\n')
+                  f.write(f'{d} * "Payee {i % 100}" "Transaction {i}"\n')
                   f.write(f"  {expense}  {amount} USD\n")
                   f.write(f"  {source}\n\n")
-
-          print("Generated benchmark.beancount with 10,000 transactions")
           EOF
 
       - name: Benchmark Python beancount
         id: python_bench
         run: |
-          # Warm up
-          bean-check benchmark.beancount > /dev/null 2>&1
-
-          # Run 5 times and average
+          bean-check benchmark.beancount > /dev/null 2>&1  # warm up
           total=0
           for i in {1..5}; do
             start=$(date +%s%N)
@@ -108,15 +97,12 @@ jobs:
           done
           avg=$((total / 5))
           echo "python_ms=$avg" >> $GITHUB_OUTPUT
-          echo "Python beancount: ${avg}ms (avg of 5 runs)"
+          echo "Python beancount: ${avg}ms"
 
       - name: Benchmark rustledger
         id: rust_bench
         run: |
-          # Warm up
-          ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1
-
-          # Run 5 times and average
+          ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1  # warm up
           total=0
           for i in {1..5}; do
             start=$(date +%s%N)
@@ -127,43 +113,138 @@ jobs:
           done
           avg=$((total / 5))
           echo "rust_ms=$avg" >> $GITHUB_OUTPUT
-          echo "rustledger: ${avg}ms (avg of 5 runs)"
+          echo "rustledger: ${avg}ms"
 
-      - name: Calculate speedup and update results
+      - name: Update results and generate chart
         run: |
-          python_ms=${{ steps.python_bench.outputs.python_ms }}
-          rust_ms=${{ steps.rust_bench.outputs.rust_ms }}
-          speedup=$(echo "scale=1; $python_ms / $rust_ms" | bc)
+          python3 << 'EOF'
+          import json
+          import os
+          from datetime import datetime
+          import matplotlib.pyplot as plt
+          import matplotlib.dates as mdates
+          from pathlib import Path
 
+          # Get new results
+          python_ms = int(os.environ.get('PYTHON_MS', 0))
+          rust_ms = int(os.environ.get('RUST_MS', 0))
+          speedup = round(python_ms / rust_ms, 1) if rust_ms > 0 else 0
+          now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+          date_short = datetime.utcnow().strftime('%Y-%m-%d')
+
+          # Load existing history
+          history_file = Path('.github/badges/benchmark-history.json')
+          history_file.parent.mkdir(parents=True, exist_ok=True)
+
+          if history_file.exists():
+              history = json.loads(history_file.read_text())
+          else:
+              history = []
+
+          # Append new result (keep last 90 days)
+          history.append({
+              'date': date_short,
+              'timestamp': now,
+              'python_ms': python_ms,
+              'rust_ms': rust_ms,
+              'speedup': speedup
+          })
+          history = history[-90:]  # Keep 90 days max
+
+          # Save history
+          history_file.write_text(json.dumps(history, indent=2))
+
+          # Save current badge JSON
+          badge = {
+              'schemaVersion': 1,
+              'label': 'speedup',
+              'message': f'{speedup}x faster',
+              'color': 'brightgreen' if speedup >= 5 else 'green' if speedup >= 2 else 'yellow',
+              'python_ms': python_ms,
+              'rust_ms': rust_ms,
+              'speedup': speedup,
+              'transactions': 10000,
+              'updated': now
+          }
+          Path('.github/badges/benchmark.json').write_text(json.dumps(badge, indent=2))
+
+          # Generate chart
+          if len(history) >= 2:
+              dates = [datetime.strptime(h['date'], '%Y-%m-%d') for h in history]
+              python_times = [h['python_ms'] for h in history]
+              rust_times = [h['rust_ms'] for h in history]
+
+              plt.style.use('dark_background')
+              fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
+
+              # Plot lines
+              ax.plot(dates, python_times, 'o-', color='#f4b942', linewidth=2,
+                      markersize=6, label='Python beancount')
+              ax.plot(dates, rust_times, 'o-', color='#00d4aa', linewidth=2,
+                      markersize=6, label='rustledger')
+
+              # Fill between
+              ax.fill_between(dates, rust_times, python_times, alpha=0.2, color='#00d4aa')
+
+              # Styling
+              ax.set_ylabel('Time (ms)', fontsize=12, color='white')
+              ax.set_xlabel('')
+              ax.legend(loc='upper right', framealpha=0.9)
+              ax.set_title('Validation Time: 10K Transactions', fontsize=14, color='white', pad=10)
+
+              # Format x-axis
+              ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
+              ax.xaxis.set_major_locator(mdates.AutoDateLocator())
+              plt.xticks(rotation=45, ha='right')
+
+              # Grid
+              ax.grid(True, alpha=0.3, linestyle='--')
+              ax.set_facecolor('#1a1a2e')
+              fig.patch.set_facecolor('#1a1a2e')
+
+              # Add speedup annotation
+              latest_speedup = history[-1]['speedup']
+              ax.annotate(f'{latest_speedup}x faster',
+                          xy=(dates[-1], (python_times[-1] + rust_times[-1]) / 2),
+                          xytext=(10, 0), textcoords='offset points',
+                          fontsize=11, color='#00d4aa', fontweight='bold',
+                          va='center')
+
+              plt.tight_layout()
+              plt.savefig('.github/badges/benchmark-chart.svg', format='svg',
+                          facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
+              plt.savefig('.github/badges/benchmark-chart.png', format='png',
+                          facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
+              plt.close()
+              print(f"Generated chart with {len(history)} data points")
+          else:
+              print("Not enough data points for chart yet")
+
+          # Summary
+          print(f"\n## Benchmark Results")
+          print(f"Python beancount: {python_ms}ms")
+          print(f"rustledger: {rust_ms}ms")
+          print(f"Speedup: {speedup}x faster")
+          EOF
+        env:
+          PYTHON_MS: ${{ steps.python_bench.outputs.python_ms }}
+          RUST_MS: ${{ steps.rust_bench.outputs.rust_ms }}
+
+      - name: Update summary
+        run: |
           echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Tool | Time (10K transactions) |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------------------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Python beancount | ${python_ms}ms |" >> $GITHUB_STEP_SUMMARY
-          echo "| rustledger | ${rust_ms}ms |" >> $GITHUB_STEP_SUMMARY
+          cat .github/badges/benchmark.json | jq -r '"| Tool | Time |"' >> $GITHUB_STEP_SUMMARY
+          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
+          cat .github/badges/benchmark.json | jq -r '"| Python beancount | \(.python_ms)ms |"' >> $GITHUB_STEP_SUMMARY
+          cat .github/badges/benchmark.json | jq -r '"| rustledger | \(.rust_ms)ms |"' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Speedup: ${speedup}x faster**" >> $GITHUB_STEP_SUMMARY
+          cat .github/badges/benchmark.json | jq -r '"**Speedup: \(.speedup)x faster**"' >> $GITHUB_STEP_SUMMARY
 
-          # Create JSON for badge
-          mkdir -p .github/badges
-          cat > .github/badges/benchmark.json << ENDJSON
-          {
-            "schemaVersion": 1,
-            "label": "speedup",
-            "message": "${speedup}x faster",
-            "color": "brightgreen",
-            "python_ms": $python_ms,
-            "rust_ms": $rust_ms,
-            "speedup": $speedup,
-            "transactions": 10000,
-            "updated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          }
-          ENDJSON
-
-      - name: Commit benchmark results
+      - name: Commit results
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/badges/benchmark.json
+          git add .github/badges/
           git diff --staged --quiet || git commit -m "chore: update benchmark results [skip ci]"
           git push || echo "Nothing to push"

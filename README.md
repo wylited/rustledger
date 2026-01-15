@@ -194,7 +194,13 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 
 [![Benchmark](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/rustledger/rustledger/main/.github/badges/benchmark.json)](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)
 
-Benchmarks run nightly on identical 10K transaction ledgers. See [workflow results](https://github.com/rustledger/rustledger/actions/workflows/bench.yml) for details.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/main/.github/badges/benchmark-chart.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/main/.github/badges/benchmark-chart.svg">
+  <img alt="Benchmark Chart" src="https://raw.githubusercontent.com/rustledger/rustledger/main/.github/badges/benchmark-chart.png" width="100%">
+</picture>
+
+<sub>Benchmarks run nightly on identical 10K transaction ledgers. [View workflow →](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)</sub>
 
 ## npm Packages
 
