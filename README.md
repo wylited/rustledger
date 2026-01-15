@@ -23,71 +23,27 @@ Parse and validate your ledger faster than Python beancount.
 | **Drop-in replacement** | Compatible `bean-*` CLI commands for easy migration |
 | **Full compatibility** | Parses any valid beancount file |
 
+## Install
+
+| Platform | Command |
+|----------|---------|
+| **Script** | `curl -sSfL rustledger.github.io/i \| sh` |
+| **macOS** | `brew install rustledger/rustledger/rustledger` |
+| **Ubuntu/Debian** | `sudo add-apt-repository ppa:robcohen/rustledger && sudo apt install rustledger` |
+| **Fedora/RHEL** | `sudo dnf copr enable rustledger/rustledger && sudo dnf install rustledger` |
+| **Arch** | `yay -S rustledger-bin` |
+| **Windows** | `scoop bucket add rustledger https://github.com/rustledger/scoop-rustledger && scoop install rustledger` |
+| **Cargo** | `cargo binstall rustledger` or `cargo install rustledger` |
+| **Nix** | `nix run github:rustledger/rustledger` |
+| **Docker** | `docker run --rm -v "$PWD:/data" ghcr.io/rustledger/rustledger /data/ledger.beancount` |
+| **Binaries** | [GitHub Releases](https://github.com/rustledger/rustledger/releases) |
+
 ## Quick Start
 
 ```bash
-# Install
-curl -sSfL rustledger.github.io/i | sh
-
-# Validate your ledger
 rledger-check ledger.beancount
-
-# Query your data
 rledger-query ledger.beancount "SELECT account, SUM(position) GROUP BY account"
 ```
-
-<details>
-<summary><strong>All installation options</strong></summary>
-
-### macOS
-```bash
-brew install rustledger/rustledger/rustledger
-```
-
-### Ubuntu/Debian
-```bash
-sudo add-apt-repository ppa:robcohen/rustledger
-sudo apt update && sudo apt install rustledger
-```
-
-### Fedora/RHEL
-```bash
-sudo dnf copr enable rustledger/rustledger
-sudo dnf install rustledger
-```
-
-### Arch Linux
-```bash
-yay -S rustledger-bin   # Pre-built binary
-yay -S rustledger       # Build from source
-```
-
-### Windows
-```powershell
-scoop bucket add rustledger https://github.com/rustledger/scoop-rustledger
-scoop install rustledger
-```
-
-### Cargo
-```bash
-cargo binstall rustledger  # Pre-built binary (fast)
-cargo install rustledger   # Build from source
-```
-
-### Nix
-```bash
-nix run github:rustledger/rustledger -- rledger-check ledger.beancount
-```
-
-### Docker
-```bash
-docker run --rm -v "$PWD:/data" ghcr.io/rustledger/rustledger /data/ledger.beancount
-```
-
-### Pre-built Binaries
-Download from [GitHub Releases](https://github.com/rustledger/rustledger/releases) for Linux (glibc/musl), macOS, and Windows (x64/arm64).
-
-</details>
 
 ## CLI Commands
 
