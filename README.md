@@ -117,9 +117,10 @@ rledger-format --in-place ledger.beancount
 
 ```rust
 use rustledger_loader::load;
+use std::path::Path;
 
 fn main() -> anyhow::Result<()> {
-    let result = load("ledger.beancount")?;
+    let result = load(Path::new("ledger.beancount"))?;
     println!("Loaded {} directives", result.directives.len());
     Ok(())
 }
@@ -133,14 +134,16 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 
 | Crate | Description |
 |-------|-------------|
+| `rustledger` | CLI tools (rledger-check, rledger-query, etc.) |
 | `rustledger-core` | Core types: Amount, Position, Inventory |
 | `rustledger-parser` | Lexer and parser with error recovery |
 | `rustledger-loader` | File loading and includes |
 | `rustledger-booking` | Interpolation and 7 booking methods |
-| `rustledger-validate` | 30 validation error codes |
+| `rustledger-validate` | 26 validation error codes |
 | `rustledger-query` | BQL query engine |
 | `rustledger-plugin` | 20 built-in plugins + Python plugin support |
 | `rustledger-importer` | CSV/OFX import framework |
+| `rustledger-wasm` | WebAssembly bindings for JavaScript/TypeScript |
 
 <details>
 <summary><strong>Booking methods (7)</strong></summary>
@@ -197,10 +200,11 @@ cargo add rustledger-core rustledger-parser rustledger-loader
 | Full validation | ~1.2s | ~120ms |
 | BQL query | ~200ms | ~20ms |
 
-## WebAssembly
+## npm Packages
 
 ```bash
-npm install @rustledger/wasm
+npm install @rustledger/wasm        # WebAssembly bindings
+npm install @rustledger/mcp-server  # MCP server for AI assistants
 ```
 
 ## Contributing
