@@ -440,8 +440,7 @@ mod tests {
             .unwrap_or(Decimal::ZERO);
         assert!(
             residual.abs() < dec!(0.01),
-            "USD residual should be ~0, got {}",
-            residual
+            "USD residual should be ~0, got {residual}"
         );
         // There should be NO HOOL residual
         assert!(
