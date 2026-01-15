@@ -408,7 +408,7 @@ fn pushmeta_directive<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem, Pars
         .then(metadata_value())
         .then_ignore(ws())
         .then_ignore(comment_line().or_not())
-        .map(|(key, value)| ParsedItem::Pushmeta(key, value))
+        .map(|(key, value)| ParsedItem::Pushmeta(key.to_string(), value))
 }
 
 /// Parse a popmeta directive: popmeta key:
@@ -419,7 +419,7 @@ fn popmeta_directive<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem, Parse
         .then_ignore(just(':'))
         .then_ignore(ws())
         .then_ignore(comment_line().or_not())
-        .map(ParsedItem::Popmeta)
+        .map(|key| ParsedItem::Popmeta(key.to_string()))
 }
 
 /// Parse a tag name (alphanumeric and dashes).
@@ -615,11 +615,10 @@ fn number<'a>() -> impl Parser<'a, ParserInput<'a>, Decimal, ParserExtra<'a>> + 
 /// Parse a currency code.
 /// Supports extended syntax: can start with / or uppercase letter
 /// Can contain uppercase letters, digits, ', ., _, -, /
-fn currency<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+fn currency<'a>() -> impl Parser<'a, ParserInput<'a>, &'a str, ParserExtra<'a>> + Clone {
     one_of("/ABCDEFGHIJKLMNOPQRSTUVWXYZ")
         .then(one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'._-/").repeated())
         .to_slice()
-        .map(|s: &str| s.to_string())
 }
 
 /// Parse an amount (number + currency).
@@ -656,13 +655,13 @@ fn incomplete_amount<'a>(
 
 /// A single cost component: amount, date, string label, or "*" (merge).
 #[derive(Debug, Clone)]
-enum CostComponent {
+enum CostComponent<'a> {
     /// Full amount: number + currency
-    Amount(Decimal, String),
+    Amount(Decimal, &'a str),
     /// Number only (currency inferred)
     NumberOnly(Decimal),
     /// Currency only (number to be interpolated)
-    CurrencyOnly(String),
+    CurrencyOnly(&'a str),
     /// Date
     Date(NaiveDate),
     /// String label
@@ -674,8 +673,8 @@ enum CostComponent {
 }
 
 /// Parse a cost component.
-fn cost_component<'a>() -> impl Parser<'a, ParserInput<'a>, CostComponent, ParserExtra<'a>> + Clone
-{
+fn cost_component<'a>(
+) -> impl Parser<'a, ParserInput<'a>, CostComponent<'a>, ParserExtra<'a>> + Clone {
     choice((
         // Date (must come before number to avoid 2024 matching from 2024-01-15)
         date().map(CostComponent::Date),
@@ -867,7 +866,7 @@ fn price_annotation<'a>(
 }
 
 /// Parse an account name.
-fn account<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+fn account<'a>() -> impl Parser<'a, ParserInput<'a>, &'a str, ParserExtra<'a>> + Clone {
     let account_type = choice((
         just("Assets"),
         just("Liabilities"),
@@ -883,7 +882,6 @@ fn account<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + 
     account_type
         .then(just(':').then(component).repeated().at_least(1))
         .to_slice()
-        .map(|s: &str| s.to_string())
 }
 
 /// Parse a transaction flag.
@@ -911,35 +909,30 @@ fn flag<'a>() -> impl Parser<'a, ParserInput<'a>, char, ParserExtra<'a>> + Clone
 }
 
 /// Parse a tag (#tag).
-fn tag<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
-    just('#')
-        .ignore_then(
-            one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/.")
-                .repeated()
-                .at_least(1)
-                .to_slice(),
-        )
-        .map(|s: &str| s.to_string())
+fn tag<'a>() -> impl Parser<'a, ParserInput<'a>, &'a str, ParserExtra<'a>> + Clone {
+    just('#').ignore_then(
+        one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/.")
+            .repeated()
+            .at_least(1)
+            .to_slice(),
+    )
 }
 
 /// Parse a link (^link).
-fn link<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
-    just('^')
-        .ignore_then(
-            one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/.")
-                .repeated()
-                .at_least(1)
-                .to_slice(),
-        )
-        .map(|s: &str| s.to_string())
+fn link<'a>() -> impl Parser<'a, ParserInput<'a>, &'a str, ParserExtra<'a>> + Clone {
+    just('^').ignore_then(
+        one_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/.")
+            .repeated()
+            .at_least(1)
+            .to_slice(),
+    )
 }
 
 /// Parse a metadata key (lowercase letter followed by alphanumeric, dash, or underscore).
-fn metadata_key<'a>() -> impl Parser<'a, ParserInput<'a>, String, ParserExtra<'a>> + Clone {
+fn metadata_key<'a>() -> impl Parser<'a, ParserInput<'a>, &'a str, ParserExtra<'a>> + Clone {
     one_of("abcdefghijklmnopqrstuvwxyz")
         .then(one_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_").repeated())
         .to_slice()
-        .map(|s: &str| s.to_string())
 }
 
 /// Parse a boolean value (TRUE/FALSE, case-insensitive).
@@ -962,11 +955,11 @@ fn metadata_value<'a>() -> impl Parser<'a, ParserInput<'a>, MetaValue, ParserExt
         // Boolean (must be before account/currency to avoid matching as identifier)
         boolean().map(MetaValue::Bool),
         // Account (must be before currency since currency is a prefix match)
-        account().map(MetaValue::Account),
+        account().map(|s| MetaValue::Account(s.to_string())),
         // Tag
-        tag().map(MetaValue::Tag),
+        tag().map(|s| MetaValue::Tag(s.to_string())),
         // Link
-        link().map(MetaValue::Link),
+        link().map(|s| MetaValue::Link(s.to_string())),
         // Date (try before number to avoid partial match)
         date().map(MetaValue::Date),
         // Amount (number + currency) - try before plain number
@@ -974,13 +967,13 @@ fn metadata_value<'a>() -> impl Parser<'a, ParserInput<'a>, MetaValue, ParserExt
         // Plain number
         number().map(MetaValue::Number),
         // Currency (standalone)
-        currency().map(MetaValue::Currency),
+        currency().map(|s| MetaValue::Currency(s.to_string())),
     ))
 }
 
 /// Parse a metadata line (indented key: value).
 /// Value is optional - `key:` without a value produces `MetaValue::None`
-fn metadata_line<'a>() -> impl Parser<'a, ParserInput<'a>, (String, MetaValue), ParserExtra<'a>> {
+fn metadata_line<'a>() -> impl Parser<'a, ParserInput<'a>, (&'a str, MetaValue), ParserExtra<'a>> {
     newline()
         .ignore_then(ws1())
         .ignore_then(metadata_key())
@@ -1015,18 +1008,18 @@ fn dated_directive<'a>() -> impl Parser<'a, ParserInput<'a>, Directive, ParserEx
 
 /// Either a posting, metadata entry, or tag/link continuation in a transaction.
 #[derive(Debug, Clone)]
-enum PostingOrMeta {
+enum PostingOrMeta<'a> {
     Posting(Posting),
-    Meta(String, MetaValue),
-    TagsLinks(Vec<String>, Vec<String>),
+    Meta(&'a str, MetaValue),
+    TagsLinks(Vec<&'a str>, Vec<&'a str>),
 }
 
 /// Element that can appear in transaction header: string, tag, or link.
 #[derive(Debug, Clone)]
-enum TxnHeaderItem {
-    String(String),
-    Tag(String),
-    Link(String),
+enum TxnHeaderItem<'a> {
+    String(String), // String literal (may have escape sequences, needs owned)
+    Tag(&'a str),   // Tag reference (zero-copy from source)
+    Link(&'a str),  // Link reference (zero-copy from source)
 }
 
 /// Parse a transaction body.
@@ -1083,7 +1076,7 @@ fn transaction_body<'a>(
                             txn = txn.with_posting(p);
                         }
                         PostingOrMeta::Meta(k, v) => {
-                            txn.meta.insert(k, v);
+                            txn.meta.insert(k.to_string(), v);
                         }
                         PostingOrMeta::TagsLinks(t, l) => {
                             for tag in t {
@@ -1101,8 +1094,8 @@ fn transaction_body<'a>(
 }
 
 /// Parse either a posting, a metadata line, tag/link continuation, or a comment-only line.
-fn posting_or_meta<'a>() -> impl Parser<'a, ParserInput<'a>, Option<PostingOrMeta>, ParserExtra<'a>>
-{
+fn posting_or_meta<'a>(
+) -> impl Parser<'a, ParserInput<'a>, Option<PostingOrMeta<'a>>, ParserExtra<'a>> {
     // Both start with newline + indent
     // Metadata: lowercase key followed by ':'
     // Posting: flag or account (uppercase first letter)
@@ -1165,7 +1158,7 @@ fn posting_or_meta<'a>() -> impl Parser<'a, ParserInput<'a>, Option<PostingOrMet
 }
 
 /// Parse a posting-level metadata line (indented more than the posting).
-fn posting_metadata<'a>() -> impl Parser<'a, ParserInput<'a>, (String, MetaValue), ParserExtra<'a>>
+fn posting_metadata<'a>() -> impl Parser<'a, ParserInput<'a>, (&'a str, MetaValue), ParserExtra<'a>>
 {
     // Posting metadata is indented more than postings (typically 4+ spaces)
     newline()
@@ -1211,22 +1204,22 @@ fn posting<'a>() -> impl Parser<'a, ParserInput<'a>, Posting, ParserExtra<'a>> {
         .map(|(((flag, acct), amount_cost_price), metadata)| {
             let mut p = if let Some((units, cost, price)) = amount_cost_price {
                 let mut posting = if let Some(u) = units {
-                    Posting::with_incomplete(&acct, u)
+                    Posting::with_incomplete(acct, u)
                 } else {
-                    Posting::auto(&acct)
+                    Posting::auto(acct)
                 };
                 posting.cost = cost;
                 posting.price = price;
                 posting
             } else {
-                Posting::auto(&acct)
+                Posting::auto(acct)
             };
             if let Some(f) = flag {
                 p.flag = Some(f);
             }
             // Add posting metadata
             for (key, value) in metadata {
-                p.meta.insert(key, value);
+                p.meta.insert(key.to_string(), value);
             }
             p
         })
@@ -1247,7 +1240,7 @@ fn balance_body<'a>(
         .then_ignore(ws())
         .then(currency())
         .then(ws().ignore_then(cost_spec()).or_not())
-        .map(|(((num, tol), curr), _cost)| (Amount::new(num, &curr), tol));
+        .map(|(((num, tol), curr), _cost)| (Amount::new(num, curr), tol));
 
     just("balance")
         .ignore_then(ws1())
@@ -1260,12 +1253,12 @@ fn balance_body<'a>(
         .map(move |((acct, (amt, tol)), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Balance(Balance {
                     date,
-                    account: acct.clone().into(),
+                    account: acct.into(),
                     amount: amt.clone(),
                     tolerance: tol,
                     meta: meta.clone(),
@@ -1294,13 +1287,13 @@ fn open_body<'a>(
         .map(move |(((acct, currencies), booking), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Open(Open {
                     date,
-                    account: acct.clone().into(),
-                    currencies: currencies.iter().map(|c| c.clone().into()).collect(),
+                    account: acct.into(),
+                    currencies: currencies.iter().copied().map(Into::into).collect(),
                     booking: booking.clone(),
                     meta: meta.clone(),
                 })
@@ -1320,12 +1313,12 @@ fn close_body<'a>(
         .map(move |(acct, meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Close(Close {
                     date,
-                    account: acct.clone().into(),
+                    account: acct.into(),
                     meta: meta.clone(),
                 })
             }) as Box<dyn Fn(NaiveDate) -> Directive + 'a>
@@ -1345,11 +1338,11 @@ fn commodity_body<'a>(
             Box::new(move |date: NaiveDate| {
                 let mut meta = Metadata::default();
                 for (k, v) in metadata.clone() {
-                    meta.insert(k, v);
+                    meta.insert(k.to_string(), v);
                 }
                 Directive::Commodity(Commodity {
                     date,
-                    currency: curr.clone().into(),
+                    currency: curr.into(),
                     meta,
                 })
             }) as Box<dyn Fn(NaiveDate) -> Directive + 'a>
@@ -1370,13 +1363,13 @@ fn pad_body<'a>(
         .map(move |((acct, source), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Pad(Pad {
                     date,
-                    account: acct.clone().into(),
-                    source_account: source.clone().into(),
+                    account: acct.into(),
+                    source_account: source.into(),
                     meta: meta.clone(),
                 })
             }) as Box<dyn Fn(NaiveDate) -> Directive + 'a>
@@ -1397,7 +1390,7 @@ fn event_body<'a>(
         .map(move |((name, value), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Event(Event {
@@ -1446,12 +1439,12 @@ fn note_body<'a>(
         .map(move |((acct, comment), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Note(Note {
                     date,
-                    account: acct.clone().into(),
+                    account: acct.into(),
                     comment: comment.clone(),
                     meta: meta.clone(),
                 })
@@ -1494,13 +1487,17 @@ fn document_body<'a>(
                 });
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
+
+            // Convert &str to String for owned storage
+            let tags: Vec<String> = tags.iter().copied().map(String::from).collect();
+            let links: Vec<String> = links.iter().copied().map(String::from).collect();
 
             Box::new(move |date: NaiveDate| {
                 Directive::Document(Document {
                     date,
-                    account: acct.clone().into(),
+                    account: acct.into(),
                     path: filename.clone(),
                     tags: tags.clone(),
                     links: links.clone(),
@@ -1524,12 +1521,12 @@ fn price_body<'a>(
         .map(move |((curr, amt), meta_items)| {
             let mut meta = Metadata::default();
             for (k, v) in meta_items {
-                meta.insert(k, v);
+                meta.insert(k.to_string(), v);
             }
             Box::new(move |date: NaiveDate| {
                 Directive::Price(Price {
                     date,
-                    currency: curr.clone().into(),
+                    currency: curr.into(),
                     amount: amt.clone(),
                     meta: meta.clone(),
                 })
