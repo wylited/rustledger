@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use rustledger_booking::{interpolate, InterpolationError};
 use rustledger_core::Directive;
 use rustledger_loader::{LoadError, Loader};
-#[cfg(feature = "wasm")]
+#[cfg(feature = "python-plugin-wasm")]
 use rustledger_plugin::PluginManager;
 use rustledger_plugin::{wrappers_to_directives, NativePluginRegistry, PluginInput, PluginOptions};
 use rustledger_validate::validate;
@@ -52,7 +52,7 @@ pub struct Args {
     pub auto: bool,
 
     /// Load a WASM plugin (can be specified multiple times)
-    #[cfg(feature = "wasm")]
+    #[cfg(feature = "python-plugin-wasm")]
     #[arg(long = "plugin", value_name = "WASM_FILE")]
     pub plugins: Vec<PathBuf>,
 
@@ -181,9 +181,9 @@ fn run(args: &Args) -> Result<ExitCode> {
     }
 
     // Run plugins if specified
-    #[cfg(feature = "wasm")]
+    #[cfg(feature = "python-plugin-wasm")]
     let has_wasm_plugins = !args.plugins.is_empty();
-    #[cfg(not(feature = "wasm"))]
+    #[cfg(not(feature = "python-plugin-wasm"))]
     let has_wasm_plugins = false;
 
     if !native_plugins_to_run.is_empty() || has_wasm_plugins {
@@ -228,7 +228,7 @@ fn run(args: &Args) -> Result<ExitCode> {
             }
         }
 
-        #[cfg(feature = "wasm")]
+        #[cfg(feature = "python-plugin-wasm")]
         if !args.plugins.is_empty() {
             let mut wasm_manager = PluginManager::new();
 

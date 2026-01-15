@@ -16,12 +16,13 @@ readme = "../../README.md"
 bench = false
 
 [features]
-default = ["bean-compat", "wasm"]
+default = ["bean-compat", "python-plugin-wasm"]
 # Include bean-* binaries for backwards compatibility with Python beancount.
 # Disable with: cargo install rustledger --no-default-features
 bean-compat = []
-# Enable WASM plugin runtime (adds ~30s to build time)
-wasm = ["rustledger-plugin/wasm-runtime"]
+# Enable Python plugin support via WASM sandbox (adds ~30s to build time)
+# This allows running existing Python beancount plugins
+python-plugin-wasm = ["rustledger-plugin/wasm-runtime"]
 
 # Primary binaries (always installed)
 [[bin]]
