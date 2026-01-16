@@ -25,6 +25,7 @@ rustledger-core.workspace = true
 chumsky.workspace = true
 ariadne.workspace = true
 logos.workspace = true
+logosky.workspace = true
 rust_decimal.workspace = true
 chrono.workspace = true
 thiserror.workspace = true

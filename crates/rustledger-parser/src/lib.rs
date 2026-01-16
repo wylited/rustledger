@@ -31,6 +31,7 @@
 
 mod error;
 // mod lexer; // Disabled - using direct parser instead
+pub mod logos_lexer;
 mod parser;
 mod span;
 
