@@ -24,6 +24,7 @@ rkyv = ["dep:rkyv", "rustledger-core/rkyv"]
 rustledger-core.workspace = true
 chumsky.workspace = true
 ariadne.workspace = true
+logos.workspace = true
 rust_decimal.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
