@@ -193,15 +193,15 @@ jobs:
       - name: Run balance benchmarks
         id: bench_balance
         run: |
-          echo "=== Balance Report Benchmark (parse + compute + output) ==="
+          echo "=== Balance Report Benchmark (parse + compute) ==="
           hyperfine \
             --warmup 3 \
             --runs 10 \
             --export-json bench-balance.json \
-            --command-name 'rustledger' './target/release/rledger-report benchmark.beancount balances' \
-            --command-name 'beancount' 'bean-query -q benchmark.beancount BALANCES' \
-            --command-name 'ledger' 'ledger -f benchmark.ledger balance' \
-            --command-name 'hledger' 'hledger -f benchmark.ledger balance'
+            --command-name 'rustledger' './target/release/rledger-report benchmark.beancount balances > /dev/null' \
+            --command-name 'beancount' 'bean-query -q benchmark.beancount BALANCES > /dev/null' \
+            --command-name 'ledger' 'ledger -f benchmark.ledger balance > /dev/null' \
+            --command-name 'hledger' 'hledger -f benchmark.ledger balance > /dev/null'
 
           # Extract results
           python3 << 'EOF'

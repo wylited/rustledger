@@ -100,17 +100,17 @@ hyperfine \
     --command-name 'hledger' "hledger check -f $TMPDIR/benchmark.ledger"
 
 echo ""
-echo "=== Balance Report Benchmark (parse + compute + output) ==="
+echo "=== Balance Report Benchmark (parse + compute) ==="
 echo "All tools computing account balances on equivalent data"
 echo ""
 hyperfine \
     --warmup 3 \
     --runs 10 \
     --export-json "$TMPDIR/balance.json" \
-    --command-name 'rustledger' "./target/release/rledger-report $TMPDIR/benchmark.beancount balances" \
-    --command-name 'beancount' "bean-query -q $TMPDIR/benchmark.beancount BALANCES" \
-    --command-name 'ledger' "ledger -f $TMPDIR/benchmark.ledger balance" \
-    --command-name 'hledger' "hledger -f $TMPDIR/benchmark.ledger balance"
+    --command-name 'rustledger' "./target/release/rledger-report $TMPDIR/benchmark.beancount balances > /dev/null" \
+    --command-name 'beancount' "bean-query -q $TMPDIR/benchmark.beancount BALANCES > /dev/null" \
+    --command-name 'ledger' "ledger -f $TMPDIR/benchmark.ledger balance > /dev/null" \
+    --command-name 'hledger' "hledger -f $TMPDIR/benchmark.ledger balance > /dev/null"
 
 echo ""
 echo "=== Summary ==="
