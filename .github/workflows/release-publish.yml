@@ -23,7 +23,7 @@
 # ----------------
 # - WEBSITE_DISPATCH_TOKEN: Homebrew/Scoop automation
 # - AUR_SSH_PRIVATE_KEY: AUR push access
-# - COPR_API_TOKEN: COPR build trigger
+# - COPR_LOGIN / COPR_TOKEN: COPR build trigger
 # - LAUNCHPAD_SSH_PRIVATE_KEY: Launchpad upload access
 # - LAUNCHPAD_GPG_PRIVATE_KEY: PPA package signing
 # - (npm uses OIDC trusted publishing, no token needed)
