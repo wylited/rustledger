@@ -60,3 +60,4 @@ target/criterion/
 # Documentation build
 book/
 .mcp.*
+.bench-tools/
