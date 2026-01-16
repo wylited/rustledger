@@ -113,6 +113,7 @@
           # Python with beancount for compatibility testing
           pythonWithBeancount = pkgs.python311.withPackages (ps: with ps; [
             beancount
+            beanquery  # For bean-query CLI (BQL)
             pytest
           ]);
 
@@ -385,6 +386,32 @@
             shellHook = ''
               echo "🔬 Nightly shell for fuzzing"
               echo "Run: cargo +nightly fuzz run <target>"
+            '';
+          };
+
+          # Benchmark shell with all comparison tools
+          devShells.bench = pkgs.mkShell {
+            packages = [
+              rustToolchainWithWasm
+              pkgs.hyperfine
+              pkgs.ledger
+              pkgs.hledger
+              pythonWithBeancount
+              pkgs.jq
+            ];
+            shellHook = ''
+              echo "📊 Benchmark environment"
+              echo ""
+              echo "Tools available:"
+              echo "  - rustledger: cargo build --release -p rustledger"
+              echo "  - beancount:  $(bean-check --version 2>&1 | head -1)"
+              echo "  - ledger:     $(ledger --version | head -1)"
+              echo "  - hledger:    $(hledger --version)"
+              echo "  - hyperfine:  $(hyperfine --version)"
+              echo ""
+              echo "Quick benchmark:"
+              echo "  ./scripts/bench.sh"
+              echo ""
             '';
           };
         };
