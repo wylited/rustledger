@@ -578,8 +578,14 @@ jobs:
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
+          # Write key preserving newlines (use printf to handle multi-line secrets)
+          printf '%s\n' "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
           chmod 600 ~/.ssh/aur
+          # Validate key format
+          if ! ssh-keygen -y -f ~/.ssh/aur > /dev/null 2>&1; then
+            echo "::error::AUR SSH key is invalid. Ensure it's in PEM format with proper newlines."
+            exit 1
+          fi
           echo "Host aur.archlinux.org" >> ~/.ssh/config
           echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
           echo "  User aur" >> ~/.ssh/config
@@ -833,14 +839,20 @@ jobs:
       - name: Setup GPG key
         run: |
           echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
-          # Get key ID and set trust
-          KEY_ID=$(gpg --list-secret-keys --keyid-format LONG | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)
-          echo "${KEY_ID}:6:" | gpg --import-ownertrust
+          # Get key fingerprint and set trust (use --with-colons for stable parsing)
+          FINGERPRINT=$(gpg --list-secret-keys --with-colons | grep -m1 '^fpr' | cut -d: -f10)
+          echo "${FINGERPRINT}:6:" | gpg --import-ownertrust
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.LAUNCHPAD_SSH_PRIVATE_KEY }}" > ~/.ssh/launchpad
+          # Write key preserving newlines
+          printf '%s\n' "${{ secrets.LAUNCHPAD_SSH_PRIVATE_KEY }}" > ~/.ssh/launchpad
           chmod 600 ~/.ssh/launchpad
+          # Validate key format
+          if ! ssh-keygen -y -f ~/.ssh/launchpad > /dev/null 2>&1; then
+            echo "::error::Launchpad SSH key is invalid. Ensure it's in PEM format with proper newlines."
+            exit 1
+          fi
           cat >> ~/.ssh/config << EOF
           Host ppa.launchpad.net
             IdentityFile ~/.ssh/launchpad
@@ -889,8 +901,9 @@ jobs:
             cat /tmp/changelog_entry debian/changelog > /tmp/new_changelog
             mv /tmp/new_changelog debian/changelog
 
-            # Build source package
-            debuild -S -sa -k"$(gpg --list-secret-keys --keyid-format LONG | grep sec | head -1 | awk '{print $2}' | cut -d'/' -f2)"
+            # Build source package (use --with-colons for stable GPG output parsing)
+            GPG_KEY=$(gpg --list-secret-keys --with-colons | grep -m1 '^fpr' | cut -d: -f10)
+            debuild -S -sa -k"${GPG_KEY}"
 
             # Upload to PPA
             dput rustledger-ppa "../rustledger_${DEB_VERSION}-1~${SERIES}1_source.changes" || true
