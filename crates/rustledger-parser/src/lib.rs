@@ -35,6 +35,7 @@ pub mod logos_lexer;
 mod parser;
 mod span;
 mod token_input;
+mod token_parser;
 
 pub use error::{ParseError, ParseErrorKind};
 pub use span::{Span, Spanned};
@@ -78,4 +79,12 @@ pub fn parse(source: &str) -> ParseResult {
 pub fn parse_directives(source: &str) -> (Vec<Spanned<Directive>>, Vec<ParseError>) {
     let result = parse(source);
     (result.directives, result.errors)
+}
+
+/// Parse beancount source code using the token-based parser.
+///
+/// This is an experimental API using the Logos lexer + Chumsky token parser.
+/// It may produce different results than the standard parser.
+pub fn parse_with_tokens(source: &str) -> ParseResult {
+    token_parser::parse(source)
 }

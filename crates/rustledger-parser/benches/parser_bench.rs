@@ -7,7 +7,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 use rustledger_parser::logos_lexer::tokenize;
-use rustledger_parser::parse;
+use rustledger_parser::{parse, parse_with_tokens};
 
 /// Generate a synthetic ledger with N transactions.
 #[allow(clippy::vec_init_then_push)]
@@ -176,6 +176,24 @@ fn bench_tokenize_vs_parse(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_char_vs_token_parser(c: &mut Criterion) {
+    let ledger = generate_ledger(1000);
+    let bytes = ledger.len();
+
+    let mut group = c.benchmark_group("char_vs_token_parser");
+    group.throughput(Throughput::Bytes(bytes as u64));
+
+    group.bench_function("char_parser", |b| {
+        b.iter(|| parse(black_box(&ledger)));
+    });
+
+    group.bench_function("token_parser", |b| {
+        b.iter(|| parse_with_tokens(black_box(&ledger)));
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_small,
@@ -185,6 +203,7 @@ criterion_group!(
     bench_tokenize_small,
     bench_tokenize_large,
     bench_tokenize_scaling,
-    bench_tokenize_vs_parse
+    bench_tokenize_vs_parse,
+    bench_char_vs_token_parser
 );
 criterion_main!(benches);
