@@ -19,14 +19,14 @@
 # | Homebrew     | rustledger/homebrew-rustledger         | ✓           |
 # | Scoop        | rustledger/scoop-rustledger            | ✓           |
 # | AUR          | aur.archlinux.org/rustledger{,-bin}    | ✓           |
-# | nixpkgs      | NixOS/nixpkgs (PR)                     | ✓           |
+# | Nix Flake    | flake.nix (in repo)                    | ✓           |
 # | COPR         | copr.fedorainfracloud.org/rustledger   | ✓           |
 # | PPA          | ppa:rustledger/rustledger              | ✓           |
 #
 # SECRETS REQUIRED
 # ----------------
 # - CARGO_REGISTRY_TOKEN: crates.io publish
-# - WEBSITE_DISPATCH_TOKEN: Homebrew/Scoop/nixpkgs automation
+# - WEBSITE_DISPATCH_TOKEN: Homebrew/Scoop automation
 # - AUR_SSH_PRIVATE_KEY: AUR push access
 # - COPR_API_TOKEN: COPR build trigger (from copr.fedorainfracloud.org/api)
 # - LAUNCHPAD_SSH_PRIVATE_KEY: Launchpad upload access
@@ -641,150 +641,6 @@ jobs:
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "Update to ${{ steps.checksums.outputs.version }}"
           git push
-
-  # Update nixpkgs (stable releases only)
-  update-nixpkgs:
-    name: Update nixpkgs
-    needs: release
-    runs-on: ubuntu-latest
-    # Run for all releases (0.x.y has no hyphens, so this always runs)
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-      - name: Install Nix
-        uses: cachix/install-nix-action@v30
-      - name: Get hashes
-        id: hashes
-        run: |
-          VERSION=${RELEASE_TAG#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-          # Get source hash
-          SRC_HASH=$(nix-prefetch-github rustledger rustledger --rev "v${VERSION}" --json | jq -r .hash)
-          echo "src_hash=$SRC_HASH" >> $GITHUB_OUTPUT
-
-          # Get cargo hash by building with fake hash and extracting from error
-          cat > /tmp/package.nix << 'PKGEOF'
-          { lib, rustPlatform, fetchFromGitHub }:
-          rustPlatform.buildRustPackage rec {
-            pname = "rustledger";
-            version = "VERSION_PLACEHOLDER";
-            src = fetchFromGitHub {
-              owner = "rustledger";
-              repo = "rustledger";
-              rev = "v${version}";
-              hash = "SRC_HASH_PLACEHOLDER";
-            };
-            cargoHash = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
-            meta.license = lib.licenses.gpl3Only;
-          }
-          PKGEOF
-          sed -i "s/VERSION_PLACEHOLDER/${VERSION}/" /tmp/package.nix
-          sed -i "s|SRC_HASH_PLACEHOLDER|${SRC_HASH}|" /tmp/package.nix
-
-          CARGO_HASH=$(nix-build -E 'with import <nixpkgs> {}; callPackage /tmp/package.nix {}' 2>&1 | grep "got:" | awk '{print $2}') || true
-          echo "cargo_hash=$CARGO_HASH" >> $GITHUB_OUTPUT
-      - name: Create nixpkgs PR
-        env:
-          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
-        run: |
-          VERSION=${{ steps.hashes.outputs.version }}
-          SRC_HASH=${{ steps.hashes.outputs.src_hash }}
-          CARGO_HASH=${{ steps.hashes.outputs.cargo_hash }}
-
-          # Fork and clone nixpkgs
-          gh repo fork NixOS/nixpkgs --clone --remote
-          cd nixpkgs
-
-          # Check if package already exists and get current version
-          OLD_VERSION=""
-          if [ -f pkgs/by-name/ru/rustledger/package.nix ]; then
-            OLD_VERSION=$(grep 'version = "' pkgs/by-name/ru/rustledger/package.nix | head -1 | sed 's/.*version = "\([^"]*\)".*/\1/')
-          fi
-
-          # Create branch
-          git checkout -b "rustledger-${VERSION}"
-
-          # Create package directory
-          mkdir -p pkgs/by-name/ru/rustledger
-
-          # Write package.nix
-          cat > pkgs/by-name/ru/rustledger/package.nix << PKGEOF
-          {
-            lib,
-            rustPlatform,
-            fetchFromGitHub,
-          }:
-
-          rustPlatform.buildRustPackage rec {
-            pname = "rustledger";
-            version = "${VERSION}";
-
-            src = fetchFromGitHub {
-              owner = "rustledger";
-              repo = "rustledger";
-              rev = "v\${version}";
-              hash = "${SRC_HASH}";
-            };
-
-            cargoHash = "${CARGO_HASH}";
-
-            meta = with lib; {
-              description = "Fast, pure Rust implementation of Beancount double-entry accounting";
-              homepage = "https://rustledger.github.io";
-              changelog = "https://github.com/rustledger/rustledger/releases/tag/v\${version}";
-              license = licenses.gpl3Only;
-              maintainers = with maintainers; [ ];
-              mainProgram = "rledger-check";
-            };
-          }
-          PKGEOF
-
-          # Determine PR title and body based on whether this is init or update
-          if [ -n "$OLD_VERSION" ]; then
-            PR_TITLE="rustledger: ${OLD_VERSION} -> ${VERSION}"
-            PR_BODY="## Description
-
-          Update [rustledger](https://github.com/rustledger/rustledger) from ${OLD_VERSION} to ${VERSION}.
-
-          [Changelog](https://github.com/rustledger/rustledger/releases/tag/v${VERSION})
-
-          ---
-          *Automated PR from rustledger release workflow*"
-            COMMIT_MSG="rustledger: ${OLD_VERSION} -> ${VERSION}"
-          else
-            PR_TITLE="rustledger: init at ${VERSION}"
-            PR_BODY="## Description
-
-          Add [rustledger](https://github.com/rustledger/rustledger), a fast pure Rust implementation of Beancount double-entry accounting.
-
-          - 10x faster than Python beancount
-          - Full Beancount syntax compatibility
-          - Single binary, no Python dependencies
-
-          ## Things done
-
-          - Built on x86_64-linux
-          - Tested basic functionality
-
-          ---
-          *Automated PR from rustledger release workflow*"
-            COMMIT_MSG="rustledger: init at ${VERSION}"
-          fi
-
-          # Commit and push
-          git config user.name "rustledger-ci"
-          git config user.email "rustledger-ci@users.noreply.github.com"
-          git add pkgs/by-name/ru/rustledger/package.nix
-          git commit -m "$COMMIT_MSG"
-          git push -u origin "rustledger-${VERSION}"
-
-          # Create PR
-          gh pr create \
-            --repo NixOS/nixpkgs \
-            --title "$PR_TITLE" \
-            --body "$PR_BODY"
 
   # Trigger COPR build (Fedora/RHEL)
   # COPR is configured to build from SCM (GitHub) with spec file at packaging/rpm/rustledger.spec
