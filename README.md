@@ -145,15 +145,19 @@ rledger-format --in-place ledger.beancount
 
 ## Performance
 
-[![Benchmark](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/benchmark.json)](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)
-
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/benchmark-chart.svg">
-  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/benchmark-chart.svg">
-  <img alt="Benchmark Chart" src="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/benchmark-chart.png" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/validation-chart.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/validation-chart.svg">
+  <img alt="Validation Benchmark" src="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/validation-chart.png" width="100%">
 </picture>
 
-<sub>Benchmarks run nightly on identical 10K transaction ledgers. [View workflow →](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)</sub>
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/balance-chart.svg">
+  <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/balance-chart.svg">
+  <img alt="Balance Report Benchmark" src="https://raw.githubusercontent.com/rustledger/rustledger/benchmarks/.github/badges/balance-chart.png" width="100%">
+</picture>
+
+<sub>Benchmarks run nightly on 10K transaction ledgers. [View workflow →](https://github.com/rustledger/rustledger/actions/workflows/bench.yml)</sub>
 
 ## Contributing
 
