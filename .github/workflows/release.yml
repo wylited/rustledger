@@ -74,12 +74,12 @@ jobs:
           - target: aarch64-unknown-linux-musl
             os: ubuntu-latest
             cross: true
-          # macOS - PGO enabled for both architectures
+          # macOS - ARM runner for both (Intel runners deprecated)
           - target: x86_64-apple-darwin
-            os: macos-13  # Intel runner for x86_64
-            pgo: true
+            os: macos-latest
+            # No PGO - can't run x86 binary on ARM runner
           - target: aarch64-apple-darwin
-            os: macos-latest  # ARM runner
+            os: macos-latest
             pgo: true
           # Windows - PGO enabled for x86_64
           - target: x86_64-pc-windows-msvc
