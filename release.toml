@@ -1,0 +1,37 @@
+# cargo-release configuration
+# Run: cargo release [patch|minor|major] --execute
+#
+# This will:
+# 1. Bump version in all Cargo.toml files
+# 2. Update Cargo.lock
+# 3. Commit the version bump
+# 4. Create a git tag (v{version})
+# 5. Push the commit and tag to origin
+#
+# The tag push triggers the release-build.yml workflow.
+
+# Use workspace versioning - all crates share the same version
+shared-version = true
+
+# Tag format: v0.2.0
+tag-prefix = "v"
+tag-name = "{{prefix}}{{version}}"
+
+# Commit message format
+pre-release-commit-message = "chore: release v{{version}}"
+
+# Don't publish to crates.io from cargo-release (handled by CI)
+publish = false
+
+# Push to origin after tagging
+push = true
+
+# Sign tags with GPG (disable if you don't have GPG set up)
+sign-tag = false
+sign-commit = false
+
+# Allow releasing from main branch only
+allow-branch = ["main"]
+
+# Pre-release hook to verify everything builds
+pre-release-hook = ["cargo", "check", "--workspace"]
