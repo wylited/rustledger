@@ -206,6 +206,11 @@ jobs:
         if: ${{ !matrix.pgo }}
         shell: bash
         run: |
+          # macOS: Use classic linker to avoid Xcode 15 crashes on long symbol names
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
+          fi
+
           if [ "${{ matrix.cross }}" = "true" ]; then
             cross build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
           else
