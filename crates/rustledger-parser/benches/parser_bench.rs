@@ -6,6 +6,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
+use rustledger_parser::logos_lexer::tokenize;
 use rustledger_parser::parse;
 
 /// Generate a synthetic ledger with N transactions.
@@ -112,11 +113,78 @@ fn bench_parse_scaling(c: &mut Criterion) {
     group.finish();
 }
 
+// ===== Lexer Benchmarks =====
+
+fn bench_tokenize_small(c: &mut Criterion) {
+    let ledger = generate_ledger(10);
+    let bytes = ledger.len();
+
+    let mut group = c.benchmark_group("tokenize_small");
+    group.throughput(Throughput::Bytes(bytes as u64));
+
+    group.bench_function("10_transactions", |b| {
+        b.iter(|| tokenize(black_box(&ledger)));
+    });
+
+    group.finish();
+}
+
+fn bench_tokenize_large(c: &mut Criterion) {
+    let ledger = generate_ledger(1000);
+    let bytes = ledger.len();
+
+    let mut group = c.benchmark_group("tokenize_large");
+    group.throughput(Throughput::Bytes(bytes as u64));
+
+    group.bench_function("1000_transactions", |b| {
+        b.iter(|| tokenize(black_box(&ledger)));
+    });
+
+    group.finish();
+}
+
+fn bench_tokenize_scaling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("tokenize_scaling");
+
+    for size in [10, 50, 100, 500, 1000] {
+        let ledger = generate_ledger(size);
+        group.throughput(Throughput::Bytes(ledger.len() as u64));
+
+        group.bench_with_input(BenchmarkId::from_parameter(size), &ledger, |b, ledger| {
+            b.iter(|| tokenize(black_box(ledger)));
+        });
+    }
+
+    group.finish();
+}
+
+fn bench_tokenize_vs_parse(c: &mut Criterion) {
+    let ledger = generate_ledger(1000);
+    let bytes = ledger.len();
+
+    let mut group = c.benchmark_group("tokenize_vs_parse");
+    group.throughput(Throughput::Bytes(bytes as u64));
+
+    group.bench_function("tokenize_only", |b| {
+        b.iter(|| tokenize(black_box(&ledger)));
+    });
+
+    group.bench_function("full_parse", |b| {
+        b.iter(|| parse(black_box(&ledger)));
+    });
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_parse_small,
     bench_parse_medium,
     bench_parse_large,
-    bench_parse_scaling
+    bench_parse_scaling,
+    bench_tokenize_small,
+    bench_tokenize_large,
+    bench_tokenize_scaling,
+    bench_tokenize_vs_parse
 );
 criterion_main!(benches);
