@@ -15,17 +15,12 @@
 # | Docker       | ghcr.io/rustledger/rustledger          |
 # | Homebrew     | rustledger/homebrew-rustledger         |
 # | Scoop        | rustledger/scoop-rustledger            |
-# | AUR          | aur.archlinux.org/rustledger{,-bin}    |
 # | COPR         | copr.fedorainfracloud.org/rustledger   |
-# | PPA          | ppa:rustledger/rustledger              |
 #
 # SECRETS REQUIRED
 # ----------------
 # - WEBSITE_DISPATCH_TOKEN: Homebrew/Scoop automation
-# - AUR_SSH_PRIVATE_KEY: AUR push access
 # - COPR_LOGIN / COPR_TOKEN: COPR build trigger
-# - LAUNCHPAD_SSH_PRIVATE_KEY: Launchpad upload access
-# - LAUNCHPAD_GPG_PRIVATE_KEY: PPA package signing
 # - (npm uses OIDC trusted publishing, no token needed)
 #
 name: Release Publish
@@ -227,87 +222,6 @@ jobs:
           event-type: release
           client-payload: '{"version": "${{ env.RELEASE_TAG }}"}'
 
-  # Update AUR packages
-  update-aur:
-    name: Update AUR packages
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          # Write key preserving newlines (use printf to handle multi-line secrets)
-          printf '%s\n' "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
-          chmod 600 ~/.ssh/aur
-          # Validate key format
-          if ! ssh-keygen -y -f ~/.ssh/aur > /dev/null 2>&1; then
-            echo "::error::AUR SSH key is invalid. Ensure it's in PEM format with proper newlines."
-            exit 1
-          fi
-          echo "Host aur.archlinux.org" >> ~/.ssh/config
-          echo "  IdentityFile ~/.ssh/aur" >> ~/.ssh/config
-          echo "  User aur" >> ~/.ssh/config
-          ssh-keyscan aur.archlinux.org >> ~/.ssh/known_hosts
-      - name: Get checksums
-        id: checksums
-        run: |
-          VERSION=${RELEASE_TAG#v}
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "pkgver=${VERSION//-/_}" >> $GITHUB_OUTPUT
-
-          SHA_X86=$(curl -sL "https://github.com/rustledger/rustledger/releases/download/v${VERSION}/rustledger-v${VERSION}-x86_64-unknown-linux-gnu.tar.gz" | sha256sum | cut -d' ' -f1)
-          SHA_ARM=$(curl -sL "https://github.com/rustledger/rustledger/releases/download/v${VERSION}/rustledger-v${VERSION}-aarch64-unknown-linux-gnu.tar.gz" | sha256sum | cut -d' ' -f1)
-          SHA_SRC=$(curl -sL "https://github.com/rustledger/rustledger/archive/refs/tags/v${VERSION}.tar.gz" | sha256sum | cut -d' ' -f1)
-
-          echo "sha_x86=$SHA_X86" >> $GITHUB_OUTPUT
-          echo "sha_arm=$SHA_ARM" >> $GITHUB_OUTPUT
-          echo "sha_src=$SHA_SRC" >> $GITHUB_OUTPUT
-      - name: Update rustledger-bin
-        run: |
-          git clone ssh://aur@aur.archlinux.org/rustledger-bin.git /tmp/aur-bin
-          cd /tmp/aur-bin
-
-          # Update PKGBUILD
-          cp $GITHUB_WORKSPACE/packaging/aur/rustledger-bin/PKGBUILD .
-          sed -i "s/^pkgver=.*/pkgver=${{ steps.checksums.outputs.pkgver }}/" PKGBUILD
-          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${{ steps.checksums.outputs.sha_x86 }}')/" PKGBUILD
-          sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('${{ steps.checksums.outputs.sha_arm }}')/" PKGBUILD
-
-          # Generate .SRCINFO using Docker
-          docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
-            "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
-
-          # Commit and push (exit 0 if nothing to commit - skips push)
-          git config user.name "rustledger-ci"
-          git config user.email "rustledger-ci@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "Update to ${{ steps.checksums.outputs.version }}"
-          git push
-      - name: Update rustledger
-        run: |
-          git clone ssh://aur@aur.archlinux.org/rustledger.git /tmp/aur-src
-          cd /tmp/aur-src
-
-          # Update PKGBUILD
-          cp $GITHUB_WORKSPACE/packaging/aur/rustledger/PKGBUILD .
-          sed -i "s/^pkgver=.*/pkgver=${{ steps.checksums.outputs.pkgver }}/" PKGBUILD
-          sed -i "s/^sha256sums=.*/sha256sums=('${{ steps.checksums.outputs.sha_src }}')/" PKGBUILD
-
-          # Generate .SRCINFO using Docker
-          docker run --rm -v "$PWD:/pkg" archlinux:latest sh -c \
-            "useradd -m builder && chown -R builder:builder /pkg && su builder -c 'cd /pkg && makepkg --printsrcinfo'" > .SRCINFO
-
-          # Commit and push (exit 0 if nothing to commit - skips push)
-          git config user.name "rustledger-ci"
-          git config user.email "rustledger-ci@users.noreply.github.com"
-          git add PKGBUILD .SRCINFO
-          git diff --cached --quiet && echo "No changes to commit" && exit 0
-          git commit -m "Update to ${{ steps.checksums.outputs.version }}"
-          git push
-
   # Trigger COPR build (Fedora/RHEL)
   update-copr:
     name: Trigger COPR build
@@ -336,90 +250,3 @@ jobs:
             --name rustledger \
             --nowait || true
 
-  # Upload to Launchpad PPA (Ubuntu/Debian)
-  update-ppa:
-    name: Upload to PPA
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.RELEASE_TAG }}
-      - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y devscripts debhelper dput gnupg rustc cargo
-      - name: Setup GPG key
-        run: |
-          echo "${{ secrets.LAUNCHPAD_GPG_PRIVATE_KEY }}" | gpg --batch --import
-          # Get key fingerprint and set trust (use --with-colons for stable parsing)
-          FINGERPRINT=$(gpg --list-secret-keys --with-colons | grep -m1 '^fpr' | cut -d: -f10)
-          echo "${FINGERPRINT}:6:" | gpg --import-ownertrust
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          # Write key preserving newlines
-          printf '%s\n' "${{ secrets.LAUNCHPAD_SSH_PRIVATE_KEY }}" > ~/.ssh/launchpad
-          chmod 600 ~/.ssh/launchpad
-          # Validate key format
-          if ! ssh-keygen -y -f ~/.ssh/launchpad > /dev/null 2>&1; then
-            echo "::error::Launchpad SSH key is invalid. Ensure it's in PEM format with proper newlines."
-            exit 1
-          fi
-          cat >> ~/.ssh/config << EOF
-          Host ppa.launchpad.net
-            IdentityFile ~/.ssh/launchpad
-            User rustledger
-          EOF
-          ssh-keyscan ppa.launchpad.net >> ~/.ssh/known_hosts
-      - name: Configure dput
-        run: |
-          cat > ~/.dput.cf << EOF
-          [rustledger-ppa]
-          fqdn = ppa.launchpad.net
-          method = sftp
-          incoming = ~rustledger/ubuntu/rustledger/
-          login = rustledger
-          allow_unsigned_uploads = 0
-          EOF
-      - name: Build and upload source package
-        run: |
-          VERSION=${RELEASE_TAG#v}
-          # Convert version: 1.0.0-rc.18 -> 1.0.0~rc.18 for Debian
-          DEB_VERSION=$(echo "$VERSION" | sed 's/-/~/g')
-
-          # Create source tarball
-          TARBALL="rustledger_${DEB_VERSION}.orig.tar.gz"
-          git archive --format=tar.gz --prefix="rustledger-${DEB_VERSION}/" HEAD > "../${TARBALL}"
-
-          # Extract and prepare
-          cd ..
-          tar -xzf "${TARBALL}"
-          cd "rustledger-${DEB_VERSION}"
-
-          # Copy debian directory
-          cp -r $GITHUB_WORKSPACE/packaging/debian .
-
-          # Update changelog for each Ubuntu series
-          for SERIES in noble jammy focal; do
-            # Update changelog using heredoc to avoid YAML issues
-            cat > /tmp/changelog_entry << CHLOG
-          rustledger (${DEB_VERSION}-1~${SERIES}1) ${SERIES}; urgency=medium
-
-            * Update to version ${VERSION}
-
-           -- rustledger <rustledger@users.noreply.github.com>  $(date -R)
-
-          CHLOG
-            cat /tmp/changelog_entry debian/changelog > /tmp/new_changelog
-            mv /tmp/new_changelog debian/changelog
-
-            # Build source package (use --with-colons for stable GPG output parsing)
-            GPG_KEY=$(gpg --list-secret-keys --with-colons | grep -m1 '^fpr' | cut -d: -f10)
-            debuild -S -sa -k"${GPG_KEY}"
-
-            # Upload to PPA
-            dput rustledger-ppa "../rustledger_${DEB_VERSION}-1~${SERIES}1_source.changes" || true
-
-            # Restore original changelog for next series
-            git checkout debian/changelog
-          done
