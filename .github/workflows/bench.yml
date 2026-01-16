@@ -1,4 +1,4 @@
-# Benchmark workflow - compares rustledger vs Python beancount
+# Benchmark workflow - compares rustledger vs Python beancount, ledger, and hledger
 name: Benchmarks
 on:
   schedule:
@@ -6,6 +6,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+
+# Prevent concurrent benchmark runs from racing on the benchmarks branch
+concurrency:
+  group: benchmarks
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -15,9 +20,9 @@ env:
 
 jobs:
   benchmark-comparison:
-    name: Compare rustledger vs Python beancount
+    name: Compare rustledger vs beancount, ledger, hledger
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -35,14 +40,50 @@ jobs:
 
       - name: Install dependencies
         run: |
+          # Python beancount
           pip install beancount matplotlib
 
-      - name: Build rustledger (without WASM for faster build)
+          # Build dependencies for ledger (C++)
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake libboost-system-dev libboost-dev \
+            libboost-date-time-dev libboost-filesystem-dev libboost-iostreams-dev \
+            libboost-regex-dev libboost-test-dev libedit-dev libgmp3-dev libmpfr-dev
+
+          # hledger (Haskell) - pre-built binary from GitHub
+          curl -sL https://github.com/simonmichael/hledger/releases/latest/download/hledger-linux-x64.tar.gz | tar xz -C /tmp
+          sudo mv /tmp/hledger /usr/local/bin/
+
+          # Hyperfine for accurate benchmarking (use latest release)
+          HYPERFINE_VERSION=$(curl -s https://api.github.com/repos/sharkdp/hyperfine/releases/latest | jq -r '.tag_name')
+          curl -sL "https://github.com/sharkdp/hyperfine/releases/download/${HYPERFINE_VERSION}/hyperfine-${HYPERFINE_VERSION}-x86_64-unknown-linux-gnu.tar.gz" | tar xz -C /tmp
+          sudo mv "/tmp/hyperfine-${HYPERFINE_VERSION}-x86_64-unknown-linux-gnu/hyperfine" /usr/local/bin/
+
+      - name: Build ledger from source
         run: |
-          # Build without wasm-runtime feature - not needed for benchmarking
+          # Get latest release tag from GitHub API
+          LEDGER_VERSION=$(curl -s https://api.github.com/repos/ledger/ledger/releases/latest | jq -r '.tag_name')
+          echo "Building ledger ${LEDGER_VERSION}"
+
+          cd /tmp
+          curl -sL "https://github.com/ledger/ledger/archive/refs/tags/${LEDGER_VERSION}.tar.gz" | tar xz
+          cd "ledger-${LEDGER_VERSION#v}"
+          cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_DOCS=OFF -DBUILD_WEB_DOCS=OFF
+          cmake --build build --parallel $(nproc)
+          sudo cp build/ledger /usr/local/bin/
+
+      - name: Verify tool installations
+        run: |
+          echo "=== Installed versions ==="
+          ledger --version | head -1
+          hledger --version
+          hyperfine --version
+          bean-check --version
+
+      - name: Build rustledger
+        run: |
           cargo build --release -p rustledger --no-default-features
 
-      - name: Generate test ledger
+      - name: Generate test ledgers
         run: |
           python3 << 'EOF'
           import random
@@ -50,7 +91,8 @@ jobs:
 
           random.seed(42)  # Reproducible
 
-          accounts = [
+          # Beancount accounts (need open directives)
+          bean_accounts = [
               "Assets:Bank:Checking",
               "Assets:Bank:Savings",
               "Assets:Investments:Stocks",
@@ -68,54 +110,90 @@ jobs:
               "Equity:Opening-Balances",
           ]
 
+          # Generate transactions
+          transactions = []
+          start_date = date(2020, 1, 1)
+          for i in range(10000):
+              d = start_date + timedelta(days=i // 10)
+              amount = round(random.uniform(5, 500), 2)
+              expense = random.choice([a for a in bean_accounts if a.startswith("Expenses:")])
+              source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
+              payee = f"Payee {i % 100}"
+              narration = f"Transaction {i}"
+              transactions.append((d, payee, narration, expense, source, amount))
+
+          # Write Beancount format
           with open("benchmark.beancount", "w") as f:
               f.write('option "operating_currency" "USD"\n\n')
-              for acc in accounts:
+              for acc in bean_accounts:
                   f.write(f"2020-01-01 open {acc}\n")
               f.write("\n")
-
-              start_date = date(2020, 1, 1)
-              for i in range(10000):
-                  d = start_date + timedelta(days=i // 10)
-                  amount = round(random.uniform(5, 500), 2)
-                  expense = random.choice([a for a in accounts if a.startswith("Expenses:")])
-                  source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
-                  f.write(f'{d} * "Payee {i % 100}" "Transaction {i}"\n')
+              for d, payee, narration, expense, source, amount in transactions:
+                  f.write(f'{d} * "{payee}" "{narration}"\n')
                   f.write(f"  {expense}  {amount} USD\n")
                   f.write(f"  {source}\n\n")
+
+          # Write Ledger/hledger format (they share the same format)
+          with open("benchmark.ledger", "w") as f:
+              for d, payee, narration, expense, source, amount in transactions:
+                  f.write(f"{d} {payee} | {narration}\n")
+                  f.write(f"    {expense}  ${amount:.2f}\n")
+                  f.write(f"    {source}\n\n")
+
+          print("Generated benchmark.beancount and benchmark.ledger (10K transactions each)")
           EOF
 
-      - name: Benchmark Python beancount
-        id: python_bench
+      - name: Run benchmarks with hyperfine
+        id: benchmark
         run: |
-          bean-check benchmark.beancount > /dev/null 2>&1  # warm up
-          total=0
-          for i in {1..5}; do
-            start=$(date +%s%N)
-            bean-check benchmark.beancount > /dev/null 2>&1
-            end=$(date +%s%N)
-            elapsed=$(( (end - start) / 1000000 ))
-            total=$((total + elapsed))
-          done
-          avg=$((total / 5))
-          echo "python_ms=$avg" >> $GITHUB_OUTPUT
-          echo "Python beancount: ${avg}ms"
+          # Run hyperfine with JSON output
+          hyperfine \
+            --warmup 3 \
+            --runs 10 \
+            --export-json bench-results.json \
+            --command-name 'rustledger' './target/release/rledger-check benchmark.beancount' \
+            --command-name 'beancount' 'bean-check benchmark.beancount' \
+            --command-name 'ledger' 'ledger -f benchmark.ledger balance > /dev/null' \
+            --command-name 'hledger' 'hledger -f benchmark.ledger balance > /dev/null'
 
-      - name: Benchmark rustledger
-        id: rust_bench
-        run: |
-          ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1  # warm up
-          total=0
-          for i in {1..5}; do
-            start=$(date +%s%N)
-            ./target/release/rledger-check benchmark.beancount > /dev/null 2>&1
-            end=$(date +%s%N)
-            elapsed=$(( (end - start) / 1000000 ))
-            total=$((total + elapsed))
-          done
-          avg=$((total / 5))
-          echo "rust_ms=$avg" >> $GITHUB_OUTPUT
-          echo "rustledger: ${avg}ms"
+          # Extract results using Python
+          python3 << 'EOF'
+          import json
+          import os
+
+          with open('bench-results.json') as f:
+              results = json.load(f)
+
+          # Extract mean times in milliseconds
+          times = {}
+          for r in results['results']:
+              name = r['command']
+              mean_ms = r['mean'] * 1000  # Convert to ms
+              times[name] = round(mean_ms, 1)
+
+          # Write to GITHUB_OUTPUT
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"rustledger_ms={times.get('rustledger', 0)}\n")
+              f.write(f"beancount_ms={times.get('beancount', 0)}\n")
+              f.write(f"ledger_ms={times.get('ledger', 0)}\n")
+              f.write(f"hledger_ms={times.get('hledger', 0)}\n")
+
+          # Calculate speedups vs rustledger
+          rust_ms = times.get('rustledger', 1)
+          speedup_bean = round(times.get('beancount', 0) / rust_ms, 1) if rust_ms > 0 else 0
+          speedup_ledger = round(times.get('ledger', 0) / rust_ms, 1) if rust_ms > 0 else 0
+          speedup_hledger = round(times.get('hledger', 0) / rust_ms, 1) if rust_ms > 0 else 0
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"speedup_beancount={speedup_bean}\n")
+              f.write(f"speedup_ledger={speedup_ledger}\n")
+              f.write(f"speedup_hledger={speedup_hledger}\n")
+
+          print(f"rustledger: {times.get('rustledger')}ms")
+          print(f"beancount:  {times.get('beancount')}ms ({speedup_bean}x slower)")
+          print(f"ledger:     {times.get('ledger')}ms ({speedup_ledger}x slower)")
+          print(f"hledger:    {times.get('hledger')}ms ({speedup_hledger}x slower)")
+          EOF
 
       - name: Fetch existing history from benchmarks branch
         run: |
@@ -134,13 +212,16 @@ jobs:
           from pathlib import Path
 
           # Get new results
-          python_ms = int(os.environ.get('PYTHON_MS', 0))
-          rust_ms = int(os.environ.get('RUST_MS', 0))
-          speedup = round(python_ms / rust_ms, 1) if rust_ms > 0 else 0
+          rustledger_ms = float(os.environ.get('RUSTLEDGER_MS', 0))
+          beancount_ms = float(os.environ.get('BEANCOUNT_MS', 0))
+          ledger_ms = float(os.environ.get('LEDGER_MS', 0))
+          hledger_ms = float(os.environ.get('HLEDGER_MS', 0))
+
+          speedup_beancount = float(os.environ.get('SPEEDUP_BEANCOUNT', 0))
           now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
           date_short = datetime.utcnow().strftime('%Y-%m-%d')
 
-          # Load existing history (fetched from benchmarks branch)
+          # Load existing history
           history_file = Path('.github/badges/benchmark-history.json')
           history = json.loads(history_file.read_text())
 
@@ -148,41 +229,53 @@ jobs:
           history.append({
               'date': date_short,
               'timestamp': now,
-              'python_ms': python_ms,
-              'rust_ms': rust_ms,
-              'speedup': speedup
+              'rustledger_ms': rustledger_ms,
+              'beancount_ms': beancount_ms,
+              'ledger_ms': ledger_ms,
+              'hledger_ms': hledger_ms,
+              # Keep backwards compat with old format
+              'python_ms': beancount_ms,
+              'rust_ms': rustledger_ms,
+              'speedup': speedup_beancount
           })
-          history = history[-90:]  # Keep 90 days max
+          history = history[-90:]
 
           # Save history
           history_file.write_text(json.dumps(history, indent=2))
 
-          # Save current badge JSON (shields.io endpoint format - only allowed properties)
+          # Save badge JSON (shields.io endpoint format)
           badge = {
               'schemaVersion': 1,
-              'label': 'speedup',
-              'message': f'{speedup}x faster',
-              'color': 'brightgreen' if speedup >= 5 else 'green' if speedup >= 2 else 'yellow'
+              'label': 'vs beancount',
+              'message': f'{speedup_beancount}x faster',
+              'color': 'brightgreen' if speedup_beancount >= 5 else 'green' if speedup_beancount >= 2 else 'yellow'
           }
           Path('.github/badges/benchmark.json').write_text(json.dumps(badge, indent=2))
 
           # Generate chart
           if len(history) >= 2:
               dates = [datetime.strptime(h['date'], '%Y-%m-%d') for h in history]
-              python_times = [h['python_ms'] for h in history]
-              rust_times = [h['rust_ms'] for h in history]
+
+              # Handle both old and new format
+              rustledger_times = [h.get('rustledger_ms', h.get('rust_ms', 0)) for h in history]
+              beancount_times = [h.get('beancount_ms', h.get('python_ms', 0)) for h in history]
+              ledger_times = [h.get('ledger_ms', 0) for h in history]
+              hledger_times = [h.get('hledger_ms', 0) for h in history]
 
               plt.style.use('dark_background')
-              fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
+              fig, ax = plt.subplots(figsize=(12, 5), dpi=100)
 
-              # Plot lines
-              ax.plot(dates, python_times, 'o-', color='#f4b942', linewidth=2,
-                      markersize=6, label='Python beancount')
-              ax.plot(dates, rust_times, 'o-', color='#00d4aa', linewidth=2,
-                      markersize=6, label='rustledger')
-
-              # Fill between
-              ax.fill_between(dates, rust_times, python_times, alpha=0.2, color='#00d4aa')
+              # Plot lines for each tool
+              ax.plot(dates, beancount_times, 'o-', color='#f4b942', linewidth=2,
+                      markersize=5, label='Python beancount')
+              if any(t > 0 for t in hledger_times):
+                  ax.plot(dates, hledger_times, 's-', color='#e74c3c', linewidth=2,
+                          markersize=5, label='hledger')
+              if any(t > 0 for t in ledger_times):
+                  ax.plot(dates, ledger_times, '^-', color='#9b59b6', linewidth=2,
+                          markersize=5, label='ledger')
+              ax.plot(dates, rustledger_times, 'o-', color='#00d4aa', linewidth=2,
+                      markersize=5, label='rustledger')
 
               # Styling
               ax.set_ylabel('Time (ms)', fontsize=12, color='white')
@@ -201,12 +294,10 @@ jobs:
               fig.patch.set_facecolor('#1a1a2e')
 
               # Add speedup annotation
-              latest_speedup = history[-1]['speedup']
-              ax.annotate(f'{latest_speedup}x faster',
-                          xy=(dates[-1], (python_times[-1] + rust_times[-1]) / 2),
-                          xytext=(10, 0), textcoords='offset points',
+              ax.annotate(f'{speedup_beancount}x faster than beancount',
+                          xy=(0.02, 0.98), xycoords='axes fraction',
                           fontsize=11, color='#00d4aa', fontweight='bold',
-                          va='center')
+                          va='top', ha='left')
 
               plt.tight_layout()
               plt.savefig('.github/badges/benchmark-chart.svg', format='svg',
@@ -219,28 +310,33 @@ jobs:
               print("Not enough data points for chart yet")
 
           # Summary
-          print(f"\n## Benchmark Results")
-          print(f"Python beancount: {python_ms}ms")
-          print(f"rustledger: {rust_ms}ms")
-          print(f"Speedup: {speedup}x faster")
+          print(f"\n## Benchmark Results (10K transactions)")
+          print(f"rustledger: {rustledger_ms}ms")
+          print(f"beancount:  {beancount_ms}ms ({speedup_beancount}x slower)")
+          print(f"ledger:     {ledger_ms}ms")
+          print(f"hledger:    {hledger_ms}ms")
           EOF
         env:
-          PYTHON_MS: ${{ steps.python_bench.outputs.python_ms }}
-          RUST_MS: ${{ steps.rust_bench.outputs.rust_ms }}
+          RUSTLEDGER_MS: ${{ steps.benchmark.outputs.rustledger_ms }}
+          BEANCOUNT_MS: ${{ steps.benchmark.outputs.beancount_ms }}
+          LEDGER_MS: ${{ steps.benchmark.outputs.ledger_ms }}
+          HLEDGER_MS: ${{ steps.benchmark.outputs.hledger_ms }}
+          SPEEDUP_BEANCOUNT: ${{ steps.benchmark.outputs.speedup_beancount }}
 
       - name: Update summary
         run: |
-          python_ms=${{ steps.python_bench.outputs.python_ms }}
-          rust_ms=${{ steps.rust_bench.outputs.rust_ms }}
-          speedup=$(echo "scale=1; $python_ms / $rust_ms" | bc)
-          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Tool | Time |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Python beancount | ${python_ms}ms |" >> $GITHUB_STEP_SUMMARY
-          echo "| rustledger | ${rust_ms}ms |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Speedup: ${speedup}x faster**" >> $GITHUB_STEP_SUMMARY
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## Benchmark Results (10K transactions)
+
+          | Tool | Time | vs rustledger |
+          |------|------|---------------|
+          | **rustledger** | ${{ steps.benchmark.outputs.rustledger_ms }}ms | - |
+          | Python beancount | ${{ steps.benchmark.outputs.beancount_ms }}ms | ${{ steps.benchmark.outputs.speedup_beancount }}x slower |
+          | ledger | ${{ steps.benchmark.outputs.ledger_ms }}ms | ${{ steps.benchmark.outputs.speedup_ledger }}x slower |
+          | hledger | ${{ steps.benchmark.outputs.hledger_ms }}ms | ${{ steps.benchmark.outputs.speedup_hledger }}x slower |
+
+          *Measured with [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmup)*
+          EOF
 
       - name: Commit results to benchmarks branch
         run: |
@@ -258,6 +354,8 @@ jobs:
           git fetch origin benchmarks || true
           if git rev-parse --verify origin/benchmarks >/dev/null 2>&1; then
             git checkout benchmarks
+            # Pull any changes to avoid race conditions
+            git pull --rebase origin benchmarks || true
           else
             git checkout --orphan benchmarks
             git rm -rf . || true
