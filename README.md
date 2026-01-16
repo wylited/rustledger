@@ -163,6 +163,10 @@ rledger-format --in-place ledger.beancount
 
 See [CLAUDE.md](CLAUDE.md) for architecture and development setup.
 
+By submitting a pull request, you agree to the [Contributor License Agreement](CLA.md).
+
 ## License
 
 [GPL-3.0](LICENSE)
+
+**Commercial licensing available** - [contact us](https://rustledger.github.io/#contact) for proprietary license options.
