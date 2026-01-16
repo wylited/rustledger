@@ -1,0 +1,375 @@
+# Release Build Workflow
+# ======================
+# Triggered on version tags (v*). Builds binaries and creates GitHub Release.
+# Distribution to package managers is handled by release-publish.yml.
+#
+# WHAT THIS WORKFLOW DOES
+# -----------------------
+# 1. Build native binaries for all platforms (with PGO where possible)
+# 2. Build WASM package
+# 3. Create GitHub Release with all artifacts
+# 4. Publish to crates.io
+#
+# SECRETS REQUIRED
+# ----------------
+# - CARGO_REGISTRY_TOKEN: crates.io publish
+#
+name: Release Build
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.1.0)'
+        required: true
+        type: string
+permissions:
+  contents: write
+env:
+  CARGO_TERM_COLOR: always
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux (glibc) - PGO enabled for native target
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            pgo: true
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            cross: true
+          # Linux (musl - static binaries) - cross-compiled, no PGO
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          - target: aarch64-unknown-linux-musl
+            os: ubuntu-latest
+            cross: true
+          # macOS - ARM runner for both (Intel runners deprecated)
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            # No PGO - can't run x86 binary on ARM runner
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            pgo: true
+          # Windows - PGO enabled for x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            pgo: true
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            # No PGO - can't run ARM binary on x86 runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: llvm-tools-preview
+      - name: Install cross
+        if: matrix.cross
+        uses: taiki-e/install-action@cross
+      - name: Install cargo-pgo
+        if: matrix.pgo
+        run: cargo install cargo-pgo
+      - name: Generate benchmark for PGO (Unix)
+        if: matrix.pgo && runner.os != 'Windows'
+        run: |
+          # Generate a representative workload for PGO profiling
+          python3 << 'EOF'
+          import random
+          from datetime import date, timedelta
+          import os
+          random.seed(42)
+          accounts = [
+              "Assets:Bank:Checking", "Assets:Bank:Savings", "Assets:Investments:Stocks",
+              "Liabilities:CreditCard", "Expenses:Food:Groceries", "Expenses:Food:Restaurant",
+              "Expenses:Transport:Gas", "Expenses:Utilities:Electric", "Income:Salary", "Equity:Opening-Balances",
+          ]
+          benchmark_path = os.path.join(os.environ.get('RUNNER_TEMP', '/tmp'), 'benchmark.beancount')
+          with open(benchmark_path, "w") as f:
+              f.write('option "operating_currency" "USD"\n\n')
+              for acc in accounts:
+                  f.write(f"2020-01-01 open {acc}\n")
+              f.write("\n")
+              start_date = date(2020, 1, 1)
+              for i in range(10000):
+                  d = start_date + timedelta(days=i // 10)
+                  amount = round(random.uniform(5, 500), 2)
+                  expense = random.choice([a for a in accounts if a.startswith("Expenses:")])
+                  source = random.choice(["Assets:Bank:Checking", "Liabilities:CreditCard"])
+                  f.write(f'{d} * "Payee {i % 100}" "Transaction {i}"\n')
+                  f.write(f"  {expense}  {amount} USD\n")
+                  f.write(f"  {source}\n\n")
+          print(f"Generated benchmark at {benchmark_path}")
+          EOF
+      - name: Generate benchmark for PGO (Windows)
+        if: matrix.pgo && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $benchmarkPath = Join-Path $env:RUNNER_TEMP "benchmark.beancount"
+          $random = New-Object System.Random(42)
+          $accounts = @(
+              "Assets:Bank:Checking", "Assets:Bank:Savings", "Assets:Investments:Stocks",
+              "Liabilities:CreditCard", "Expenses:Food:Groceries", "Expenses:Food:Restaurant",
+              "Expenses:Transport:Gas", "Expenses:Utilities:Electric", "Income:Salary", "Equity:Opening-Balances"
+          )
+          $expenseAccounts = $accounts | Where-Object { $_ -like "Expenses:*" }
+          $sourceAccounts = @("Assets:Bank:Checking", "Liabilities:CreditCard")
+          $content = @('option "operating_currency" "USD"', '')
+          foreach ($acc in $accounts) {
+              $content += "2020-01-01 open $acc"
+          }
+          $content += ''
+          $startDate = [DateTime]::new(2020, 1, 1)
+          for ($i = 0; $i -lt 10000; $i++) {
+              $d = $startDate.AddDays([Math]::Floor($i / 10)).ToString("yyyy-MM-dd")
+              $amount = [Math]::Round($random.NextDouble() * 495 + 5, 2)
+              $expense = $expenseAccounts[$random.Next($expenseAccounts.Length)]
+              $source = $sourceAccounts[$random.Next($sourceAccounts.Length)]
+              $content += "$d * `"Payee $($i % 100)`" `"Transaction $i`""
+              $content += "  $expense  $amount USD"
+              $content += "  $source"
+              $content += ''
+          }
+          $content | Out-File -FilePath $benchmarkPath -Encoding utf8
+          Write-Host "Generated benchmark at $benchmarkPath"
+      - name: Build with PGO (Unix)
+        if: matrix.pgo && runner.os != 'Windows'
+        shell: bash
+        run: |
+          BENCHMARK_PATH="${RUNNER_TEMP}/benchmark.beancount"
+
+          # macOS: Use classic linker to avoid Xcode 15 crashes on long symbol names
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
+          fi
+
+          # Step 1: Build instrumented binary
+          cargo pgo build -- --no-default-features --features bean-compat
+
+          # Step 2: Run workload to collect profile data
+          for i in {1..10}; do
+            ./target/${{ matrix.target }}/release/rledger-check "$BENCHMARK_PATH" > /dev/null 2>&1
+          done
+
+          # Step 3: Build optimized binary using profile data
+          cargo pgo optimize build -- --no-default-features --features bean-compat
+      - name: Build with PGO (Windows)
+        if: matrix.pgo && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $benchmarkPath = Join-Path $env:RUNNER_TEMP "benchmark.beancount"
+
+          # Step 1: Build instrumented binary
+          cargo pgo build -- --no-default-features --features bean-compat
+
+          # Step 2: Run workload to collect profile data
+          for ($i = 0; $i -lt 10; $i++) {
+            & "./target/${{ matrix.target }}/release/rledger-check.exe" $benchmarkPath | Out-Null
+          }
+
+          # Step 3: Build optimized binary using profile data
+          cargo pgo optimize build -- --no-default-features --features bean-compat
+      - name: Build without PGO (cross-compiled targets)
+        if: ${{ !matrix.pgo }}
+        shell: bash
+        run: |
+          # macOS: Use classic linker to avoid Xcode 15 crashes on long symbol names
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            export RUSTFLAGS="-C link-arg=-Wl,-ld_classic"
+          fi
+
+          if [ "${{ matrix.cross }}" = "true" ]; then
+            cross build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
+          else
+            cargo build --release --target ${{ matrix.target }} --no-default-features --features bean-compat
+          fi
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+
+          # Get version from tag (RELEASE_TAG is set at workflow level)
+          VERSION=$RELEASE_TAG
+
+          # Create archive with all binaries
+          ARCHIVE="rustledger-${VERSION}-${{ matrix.target }}.tar.gz"
+          tar -czvf "../../../${ARCHIVE}" \
+            rledger-check rledger-format rledger-query rledger-report rledger-doctor rledger-extract rledger-price \
+            bean-check bean-format bean-query bean-report bean-doctor bean-extract bean-price
+
+          # Create checksum
+          cd ../../..
+          shasum -a 256 "$ARCHIVE" > "${ARCHIVE}.sha256"
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+
+          # Get version from tag (RELEASE_TAG is set at workflow level)
+          $VERSION = $env:RELEASE_TAG
+
+          # Create archive with all binaries
+          $ARCHIVE = "rustledger-${VERSION}-${{ matrix.target }}.zip"
+          $binaries = @(
+            "rledger-check.exe", "rledger-format.exe", "rledger-query.exe", "rledger-report.exe", "rledger-doctor.exe", "rledger-extract.exe", "rledger-price.exe",
+            "bean-check.exe", "bean-format.exe", "bean-query.exe", "bean-report.exe", "bean-doctor.exe", "bean-extract.exe", "bean-price.exe"
+          )
+          Compress-Archive -Path $binaries -DestinationPath "../../../${ARCHIVE}"
+
+          # Create checksum
+          cd ../../..
+          (Get-FileHash -Algorithm SHA256 $ARCHIVE).Hash.ToLower() + "  " + $ARCHIVE | Out-File -Encoding utf8 "${ARCHIVE}.sha256"
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rustledger-${{ matrix.target }}
+          path: |
+            rustledger-*.tar.gz
+            rustledger-*.zip
+            rustledger-*.sha256
+
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: Build WASM package
+        run: |
+          cd crates/rustledger-wasm
+          wasm-pack build --target web --release
+      - name: Prepare package
+        run: |
+          VERSION=${RELEASE_TAG#v}
+          cd crates/rustledger-wasm/pkg
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json
+          sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-package
+          path: crates/rustledger-wasm/pkg/
+
+  release:
+    name: Create Release
+    needs: [build, build-wasm]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Package WASM for release
+        run: |
+          VERSION=$RELEASE_TAG
+          # WASM files are in artifacts root after merge-multiple
+          mkdir -p wasm-pkg
+          cp artifacts/*.wasm artifacts/*.js artifacts/*.d.ts artifacts/package.json wasm-pkg/ 2>/dev/null
+          if [ ! -f "wasm-pkg/package.json" ]; then
+            echo "Error: wasm-pkg/package.json not found; cannot package WASM artifacts." >&2
+            exit 1
+          fi
+          if ! ls wasm-pkg/*.wasm >/dev/null 2>&1; then
+            echo "Error: No .wasm files found in wasm-pkg; WASM build may have failed." >&2
+            exit 1
+          fi
+          if ! ls wasm-pkg/*.js >/dev/null 2>&1; then
+            echo "Error: No .js files found in wasm-pkg; WASM build may have failed." >&2
+            exit 1
+          fi
+          cd wasm-pkg
+          tar -czvf "../artifacts/rustledger-wasm-${VERSION}.tar.gz" .
+          cd ..
+          shasum -a 256 "artifacts/rustledger-wasm-${VERSION}.tar.gz" > "artifacts/rustledger-wasm-${VERSION}.tar.gz.sha256"
+      - name: List artifacts
+        run: ls -la artifacts/
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: false
+          generate_release_notes: true
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.zip
+            artifacts/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Publish crates (in dependency order)
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          # Publish in dependency order with delay between each
+          # to allow crates.io to index the previous crate
+          # Use || true to continue if crate already exists
+
+          echo "Publishing rustledger-core..."
+          cargo publish -p rustledger-core --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-parser..."
+          cargo publish -p rustledger-parser --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-booking..."
+          cargo publish -p rustledger-booking --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-loader..."
+          cargo publish -p rustledger-loader --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-validate..."
+          cargo publish -p rustledger-validate --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-query..."
+          cargo publish -p rustledger-query --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-plugin..."
+          cargo publish -p rustledger-plugin --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger-importer..."
+          cargo publish -p rustledger-importer --no-verify || true
+          sleep 30
+
+          echo "Publishing rustledger (CLI)..."
+          cargo publish -p rustledger --no-verify || true
+
+          echo "All crates published!"
