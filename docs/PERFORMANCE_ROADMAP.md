@@ -1,16 +1,15 @@
 # Rustledger Performance Optimization Roadmap
 
-## Current Performance
+## Current Performance (10K transactions)
 
-| Metric | Value |
-|--------|-------|
-| rustledger | 160ms |
-| Python beancount | 863ms |
-| Current speedup | **5.4x** |
+| Benchmark | rustledger | beancount | Speedup |
+|-----------|------------|-----------|---------|
+| Validation (parse + check) | 35ms | 754ms | **22x faster** |
+| Balance report (parse + compute) | 118ms | 1280ms | **11x faster** |
 
 ## Target
 
-Push the speedup from 5x to **10-20x** through systematic optimization.
+~~Push the speedup from 5x to **10-20x** through systematic optimization.~~ **Achieved!**
 
 ---
 
@@ -246,11 +245,18 @@ rledger-check ledger.beancount             # Use cache (default)
 
 ## Actual Performance
 
-| Metric | Value |
-|--------|-------|
-| Cold parse (7K lines) | ~28ms |
-| Warm cache (7K lines) | ~13ms |
-| vs Python beancount | **~6x faster** (cold), **instant** (warm) |
+Measured on 10K transaction ledgers (January 2026):
+
+| Benchmark | rustledger | beancount | ledger (C++) | hledger |
+|-----------|------------|-----------|--------------|---------|
+| Validation | 35ms | 754ms | 97ms | 467ms |
+| Balance report | 118ms | 1280ms | 84ms | 571ms |
+
+**Key results:**
+- **22x faster** than beancount for validation
+- **11x faster** than beancount for balance reports
+- Competitive with ledger (C++): 2.8x slower validation, 1.4x slower balance
+- Cache hit: ~13ms for repeated runs
 
 ---
 

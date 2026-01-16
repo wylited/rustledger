@@ -113,6 +113,7 @@
           # Python with beancount for compatibility testing
           pythonWithBeancount = pkgs.python311.withPackages (ps: with ps; [
             beancount
+            beanquery  # For bean-query CLI (BQL)
             pytest
           ]);
 
@@ -385,6 +386,69 @@
             shellHook = ''
               echo "🔬 Nightly shell for fuzzing"
               echo "Run: cargo +nightly fuzz run <target>"
+            '';
+          };
+
+          # Benchmark shell with all comparison tools (downloads latest releases)
+          devShells.bench = pkgs.mkShell {
+            packages = [
+              rustToolchainWithWasm
+              pythonWithBeancount
+              pkgs.hyperfine # Use nixpkgs (already latest)
+              pkgs.jq
+              pkgs.curl
+              pkgs.gnutar
+              pkgs.gzip
+              # Build dependencies for ledger
+              pkgs.cmake
+              pkgs.boost
+              pkgs.gmp
+              pkgs.mpfr
+              pkgs.libedit
+              pkgs.gnumake
+              pkgs.gcc
+            ];
+            shellHook = ''
+              # Download latest releases to .bench-tools
+              BENCH_TOOLS="$PWD/.bench-tools"
+              mkdir -p "$BENCH_TOOLS/bin"
+              export PATH="$BENCH_TOOLS/bin:$PATH"
+
+              # Only download if not already present or older than 1 day
+              if [ ! -f "$BENCH_TOOLS/.last-update" ] || [ $(find "$BENCH_TOOLS/.last-update" -mtime +1 2>/dev/null) ]; then
+                echo "📥 Downloading latest benchmark tools..."
+
+                # hledger (pre-built binary)
+                HLEDGER_VERSION=$(curl -s https://api.github.com/repos/simonmichael/hledger/releases/latest | jq -r '.tag_name')
+                echo "  hledger $HLEDGER_VERSION"
+                curl -sL "https://github.com/simonmichael/hledger/releases/latest/download/hledger-linux-x64.tar.gz" | tar xz -C "$BENCH_TOOLS/bin/"
+
+                # ledger (build from source)
+                LEDGER_VERSION=$(curl -s https://api.github.com/repos/ledger/ledger/releases/latest | jq -r '.tag_name')
+                echo "  ledger $LEDGER_VERSION (building from source...)"
+                curl -sL "https://github.com/ledger/ledger/archive/refs/tags/$LEDGER_VERSION.tar.gz" | tar xz -C /tmp
+                cd "/tmp/ledger-''${LEDGER_VERSION#v}"
+                cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_DOCS=OFF -DBUILD_WEB_DOCS=OFF -DCMAKE_INSTALL_PREFIX="$BENCH_TOOLS" >/dev/null 2>&1
+                cmake --build build --parallel $(nproc) >/dev/null 2>&1
+                cp build/ledger "$BENCH_TOOLS/bin/"
+                cd - >/dev/null
+
+                touch "$BENCH_TOOLS/.last-update"
+                echo ""
+              fi
+
+              echo "📊 Benchmark environment"
+              echo ""
+              echo "Tools available:"
+              echo "  - rustledger: cargo build --release -p rustledger"
+              echo "  - beancount:  $(bean-check --version 2>&1 | head -1)"
+              echo "  - ledger:     $(ledger --version 2>/dev/null | head -1 || echo 'not built yet')"
+              echo "  - hledger:    $(hledger --version 2>/dev/null || echo 'not downloaded yet')"
+              echo "  - hyperfine:  $(hyperfine --version)"
+              echo ""
+              echo "Quick benchmark:"
+              echo "  ./scripts/bench.sh"
+              echo ""
             '';
           };
         };

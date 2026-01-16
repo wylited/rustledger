@@ -1,4 +1,11 @@
-# Benchmark workflow - compares rustledger vs Python beancount, ledger, and hledger
+# Benchmark workflow - fair comparisons across plain-text accounting tools
+#
+# Two benchmark groups (all 4 tools in each):
+# 1. Validation: Parse + check/validate
+# 2. Balance report: Parse + compute balances
+#
+# Note: rustledger & beancount use .beancount format; ledger & hledger use .ledger format
+#
 name: Benchmarks
 on:
   schedule:
@@ -20,7 +27,7 @@ env:
 
 jobs:
   benchmark-comparison:
-    name: Compare rustledger vs beancount, ledger, hledger
+    name: Run benchmarks
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -40,8 +47,8 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Python beancount
-          pip install beancount matplotlib
+          # Python beancount + beanquery (for BQL)
+          pip install beancount beanquery matplotlib
 
           # Build dependencies for ledger (C++)
           sudo apt-get update
@@ -78,6 +85,7 @@ jobs:
           hledger --version
           hyperfine --version
           bean-check --version
+          bean-query --version
 
       - name: Build rustledger
         run: |
@@ -143,65 +151,93 @@ jobs:
           print("Generated benchmark.beancount and benchmark.ledger (10K transactions each)")
           EOF
 
-      - name: Run benchmarks with hyperfine
-        id: benchmark
+      - name: Run validation benchmarks
+        id: bench_validation
         run: |
-          # Run hyperfine with JSON output
+          echo "=== Validation Benchmark (parse + check) ==="
           hyperfine \
             --warmup 3 \
             --runs 10 \
-            --export-json bench-results.json \
+            --export-json bench-validation.json \
             --command-name 'rustledger' './target/release/rledger-check benchmark.beancount' \
             --command-name 'beancount' 'bean-check benchmark.beancount' \
-            --command-name 'ledger' 'ledger -f benchmark.ledger balance > /dev/null' \
-            --command-name 'hledger' 'hledger -f benchmark.ledger balance > /dev/null'
+            --command-name 'ledger' 'ledger -f benchmark.ledger accounts' \
+            --command-name 'hledger' 'hledger check -f benchmark.ledger'
 
-          # Extract results using Python
+          # Extract results
           python3 << 'EOF'
           import json
           import os
 
-          with open('bench-results.json') as f:
+          with open('bench-validation.json') as f:
               results = json.load(f)
 
-          # Extract mean times in milliseconds
           times = {}
           for r in results['results']:
               name = r['command']
-              mean_ms = r['mean'] * 1000  # Convert to ms
+              mean_ms = r['mean'] * 1000
               times[name] = round(mean_ms, 1)
 
-          # Write to GITHUB_OUTPUT
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"rustledger_ms={times.get('rustledger', 0)}\n")
-              f.write(f"beancount_ms={times.get('beancount', 0)}\n")
-              f.write(f"ledger_ms={times.get('ledger', 0)}\n")
-              f.write(f"hledger_ms={times.get('hledger', 0)}\n")
-
-          # Calculate speedups vs rustledger
-          rust_ms = times.get('rustledger', 1)
-          speedup_bean = round(times.get('beancount', 0) / rust_ms, 1) if rust_ms > 0 else 0
-          speedup_ledger = round(times.get('ledger', 0) / rust_ms, 1) if rust_ms > 0 else 0
-          speedup_hledger = round(times.get('hledger', 0) / rust_ms, 1) if rust_ms > 0 else 0
-
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write(f"speedup_beancount={speedup_bean}\n")
-              f.write(f"speedup_ledger={speedup_ledger}\n")
-              f.write(f"speedup_hledger={speedup_hledger}\n")
+              f.write(f"rustledger_val_ms={times.get('rustledger', 0)}\n")
+              f.write(f"beancount_val_ms={times.get('beancount', 0)}\n")
+              f.write(f"ledger_val_ms={times.get('ledger', 0)}\n")
+              f.write(f"hledger_val_ms={times.get('hledger', 0)}\n")
 
           print(f"rustledger: {times.get('rustledger')}ms")
-          print(f"beancount:  {times.get('beancount')}ms ({speedup_bean}x slower)")
-          print(f"ledger:     {times.get('ledger')}ms ({speedup_ledger}x slower)")
-          print(f"hledger:    {times.get('hledger')}ms ({speedup_hledger}x slower)")
+          print(f"beancount:  {times.get('beancount')}ms")
+          print(f"ledger:     {times.get('ledger')}ms")
+          print(f"hledger:    {times.get('hledger')}ms")
+          EOF
+
+      - name: Run balance benchmarks
+        id: bench_balance
+        run: |
+          echo "=== Balance Report Benchmark (parse + compute) ==="
+          hyperfine \
+            --warmup 3 \
+            --runs 10 \
+            --export-json bench-balance.json \
+            --command-name 'rustledger' './target/release/rledger-report benchmark.beancount balances > /dev/null' \
+            --command-name 'beancount' 'bean-query -q benchmark.beancount BALANCES > /dev/null' \
+            --command-name 'ledger' 'ledger -f benchmark.ledger balance > /dev/null' \
+            --command-name 'hledger' 'hledger -f benchmark.ledger balance > /dev/null'
+
+          # Extract results
+          python3 << 'EOF'
+          import json
+          import os
+
+          with open('bench-balance.json') as f:
+              results = json.load(f)
+
+          times = {}
+          for r in results['results']:
+              name = r['command']
+              mean_ms = r['mean'] * 1000
+              times[name] = round(mean_ms, 1)
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"rustledger_bal_ms={times.get('rustledger', 0)}\n")
+              f.write(f"beancount_bal_ms={times.get('beancount', 0)}\n")
+              f.write(f"ledger_bal_ms={times.get('ledger', 0)}\n")
+              f.write(f"hledger_bal_ms={times.get('hledger', 0)}\n")
+
+          print(f"rustledger: {times.get('rustledger')}ms")
+          print(f"beancount:  {times.get('beancount')}ms")
+          print(f"ledger:     {times.get('ledger')}ms")
+          print(f"hledger:    {times.get('hledger')}ms")
           EOF
 
       - name: Fetch existing history from benchmarks branch
         run: |
           mkdir -p .github/badges
-          curl -sSf https://raw.githubusercontent.com/${{ github.repository }}/benchmarks/.github/badges/benchmark-history.json \
-            -o .github/badges/benchmark-history.json 2>/dev/null || echo "[]" > .github/badges/benchmark-history.json
+          curl -sSf https://raw.githubusercontent.com/${{ github.repository }}/benchmarks/.github/badges/validation-history.json \
+            -o .github/badges/validation-history.json 2>/dev/null || echo "[]" > .github/badges/validation-history.json
+          curl -sSf https://raw.githubusercontent.com/${{ github.repository }}/benchmarks/.github/badges/balance-history.json \
+            -o .github/badges/balance-history.json 2>/dev/null || echo "[]" > .github/badges/balance-history.json
 
-      - name: Update results and generate chart
+      - name: Update results and generate charts
         run: |
           python3 << 'EOF'
           import json
@@ -211,131 +247,169 @@ jobs:
           import matplotlib.dates as mdates
           from pathlib import Path
 
-          # Get new results
-          rustledger_ms = float(os.environ.get('RUSTLEDGER_MS', 0))
-          beancount_ms = float(os.environ.get('BEANCOUNT_MS', 0))
-          ledger_ms = float(os.environ.get('LEDGER_MS', 0))
-          hledger_ms = float(os.environ.get('HLEDGER_MS', 0))
+          # Get validation results
+          rustledger_val = float(os.environ.get('RUSTLEDGER_VAL_MS', 0))
+          beancount_val = float(os.environ.get('BEANCOUNT_VAL_MS', 0))
+          ledger_val = float(os.environ.get('LEDGER_VAL_MS', 0))
+          hledger_val = float(os.environ.get('HLEDGER_VAL_MS', 0))
 
-          speedup_beancount = float(os.environ.get('SPEEDUP_BEANCOUNT', 0))
+          # Get balance results
+          rustledger_bal = float(os.environ.get('RUSTLEDGER_BAL_MS', 0))
+          beancount_bal = float(os.environ.get('BEANCOUNT_BAL_MS', 0))
+          ledger_bal = float(os.environ.get('LEDGER_BAL_MS', 0))
+          hledger_bal = float(os.environ.get('HLEDGER_BAL_MS', 0))
+
           now = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
           date_short = datetime.utcnow().strftime('%Y-%m-%d')
 
-          # Load existing history
-          history_file = Path('.github/badges/benchmark-history.json')
-          history = json.loads(history_file.read_text())
-
-          # Append new result (keep last 90 days)
-          history.append({
+          # Update validation history
+          val_history_file = Path('.github/badges/validation-history.json')
+          val_history = json.loads(val_history_file.read_text())
+          val_history.append({
               'date': date_short,
               'timestamp': now,
-              'rustledger_ms': rustledger_ms,
-              'beancount_ms': beancount_ms,
-              'ledger_ms': ledger_ms,
-              'hledger_ms': hledger_ms,
-              # Keep backwards compat with old format
-              'python_ms': beancount_ms,
-              'rust_ms': rustledger_ms,
-              'speedup': speedup_beancount
+              'rustledger_ms': rustledger_val,
+              'beancount_ms': beancount_val,
+              'ledger_ms': ledger_val,
+              'hledger_ms': hledger_val,
           })
-          history = history[-90:]
+          val_history = val_history[-90:]
+          val_history_file.write_text(json.dumps(val_history, indent=2))
 
-          # Save history
-          history_file.write_text(json.dumps(history, indent=2))
+          # Update balance history
+          bal_history_file = Path('.github/badges/balance-history.json')
+          bal_history = json.loads(bal_history_file.read_text())
+          bal_history.append({
+              'date': date_short,
+              'timestamp': now,
+              'rustledger_ms': rustledger_bal,
+              'beancount_ms': beancount_bal,
+              'ledger_ms': ledger_bal,
+              'hledger_ms': hledger_bal,
+          })
+          bal_history = bal_history[-90:]
+          bal_history_file.write_text(json.dumps(bal_history, indent=2))
 
-          # Save badge JSON (shields.io endpoint format)
-          badge = {
-              'schemaVersion': 1,
-              'label': 'vs beancount',
-              'message': f'{speedup_beancount}x faster',
-              'color': 'brightgreen' if speedup_beancount >= 5 else 'green' if speedup_beancount >= 2 else 'yellow'
-          }
-          Path('.github/badges/benchmark.json').write_text(json.dumps(badge, indent=2))
+          # Common chart styling
+          plt.style.use('dark_background')
 
-          # Generate chart
-          if len(history) >= 2:
-              dates = [datetime.strptime(h['date'], '%Y-%m-%d') for h in history]
-
-              # Handle both old and new format
-              rustledger_times = [h.get('rustledger_ms', h.get('rust_ms', 0)) for h in history]
-              beancount_times = [h.get('beancount_ms', h.get('python_ms', 0)) for h in history]
-              ledger_times = [h.get('ledger_ms', 0) for h in history]
-              hledger_times = [h.get('hledger_ms', 0) for h in history]
-
-              plt.style.use('dark_background')
-              fig, ax = plt.subplots(figsize=(12, 5), dpi=100)
-
-              # Plot lines for each tool
-              ax.plot(dates, beancount_times, 'o-', color='#f4b942', linewidth=2,
-                      markersize=5, label='Python beancount')
-              if any(t > 0 for t in hledger_times):
-                  ax.plot(dates, hledger_times, 's-', color='#e74c3c', linewidth=2,
-                          markersize=5, label='hledger')
-              if any(t > 0 for t in ledger_times):
-                  ax.plot(dates, ledger_times, '^-', color='#9b59b6', linewidth=2,
-                          markersize=5, label='ledger')
-              ax.plot(dates, rustledger_times, 'o-', color='#00d4aa', linewidth=2,
-                      markersize=5, label='rustledger')
-
-              # Styling
-              ax.set_ylabel('Time (ms)', fontsize=12, color='white')
-              ax.set_xlabel('')
-              ax.legend(loc='upper right', framealpha=0.9)
-              ax.set_title('Validation Time: 10K Transactions', fontsize=14, color='white', pad=10)
-
-              # Format x-axis
+          def style_chart(ax, fig):
+              ax.grid(True, alpha=0.3, linestyle='--')
+              ax.set_facecolor('#1a1a2e')
+              fig.patch.set_facecolor('#1a1a2e')
               ax.xaxis.set_major_formatter(mdates.DateFormatter('%b %d'))
               ax.xaxis.set_major_locator(mdates.AutoDateLocator())
               plt.xticks(rotation=45, ha='right')
 
-              # Grid
-              ax.grid(True, alpha=0.3, linestyle='--')
-              ax.set_facecolor('#1a1a2e')
-              fig.patch.set_facecolor('#1a1a2e')
+          # Generate validation chart (all 4 tools)
+          if len(val_history) >= 2:
+              dates = [datetime.strptime(h['date'], '%Y-%m-%d') for h in val_history]
+              rustledger_times = [h.get('rustledger_ms', 0) for h in val_history]
+              beancount_times = [h.get('beancount_ms', 0) for h in val_history]
+              ledger_times = [h.get('ledger_ms', 0) for h in val_history]
+              hledger_times = [h.get('hledger_ms', 0) for h in val_history]
 
-              # Add speedup annotation
-              ax.annotate(f'{speedup_beancount}x faster than beancount',
-                          xy=(0.02, 0.98), xycoords='axes fraction',
-                          fontsize=11, color='#00d4aa', fontweight='bold',
-                          va='top', ha='left')
+              fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
+              ax.plot(dates, beancount_times, 'o-', color='#f4b942', linewidth=2,
+                      markersize=5, label='beancount (Python)')
+              ax.plot(dates, hledger_times, 's-', color='#e74c3c', linewidth=2,
+                      markersize=5, label='hledger (Haskell)')
+              ax.plot(dates, ledger_times, '^-', color='#9b59b6', linewidth=2,
+                      markersize=5, label='ledger (C++)')
+              ax.plot(dates, rustledger_times, 'o-', color='#00d4aa', linewidth=2,
+                      markersize=5, label='rustledger')
+
+              ax.set_ylabel('Time (ms)', fontsize=12, color='white')
+              ax.legend(loc='upper right', framealpha=0.9)
+              ax.set_title('Validation: Parse + Check (10K transactions)', fontsize=13, color='white', pad=10)
+              style_chart(ax, fig)
 
               plt.tight_layout()
-              plt.savefig('.github/badges/benchmark-chart.svg', format='svg',
+              plt.savefig('.github/badges/validation-chart.svg', format='svg',
                           facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
-              plt.savefig('.github/badges/benchmark-chart.png', format='png',
+              plt.savefig('.github/badges/validation-chart.png', format='png',
                           facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
               plt.close()
-              print(f"Generated chart with {len(history)} data points")
-          else:
-              print("Not enough data points for chart yet")
+              print(f"Generated validation chart with {len(val_history)} data points")
+
+          # Generate balance chart (all 4 tools)
+          if len(bal_history) >= 2:
+              dates = [datetime.strptime(h['date'], '%Y-%m-%d') for h in bal_history]
+              rustledger_times = [h.get('rustledger_ms', 0) for h in bal_history]
+              beancount_times = [h.get('beancount_ms', 0) for h in bal_history]
+              ledger_times = [h.get('ledger_ms', 0) for h in bal_history]
+              hledger_times = [h.get('hledger_ms', 0) for h in bal_history]
+
+              fig, ax = plt.subplots(figsize=(10, 4), dpi=100)
+              ax.plot(dates, beancount_times, 'o-', color='#f4b942', linewidth=2,
+                      markersize=5, label='beancount (Python)')
+              ax.plot(dates, hledger_times, 's-', color='#e74c3c', linewidth=2,
+                      markersize=5, label='hledger (Haskell)')
+              ax.plot(dates, ledger_times, '^-', color='#9b59b6', linewidth=2,
+                      markersize=5, label='ledger (C++)')
+              ax.plot(dates, rustledger_times, 'o-', color='#00d4aa', linewidth=2,
+                      markersize=5, label='rustledger')
+
+              ax.set_ylabel('Time (ms)', fontsize=12, color='white')
+              ax.legend(loc='upper right', framealpha=0.9)
+              ax.set_title('Balance Report: Parse + Compute (10K transactions)', fontsize=13, color='white', pad=10)
+              style_chart(ax, fig)
+
+              plt.tight_layout()
+              plt.savefig('.github/badges/balance-chart.svg', format='svg',
+                          facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
+              plt.savefig('.github/badges/balance-chart.png', format='png',
+                          facecolor='#1a1a2e', edgecolor='none', bbox_inches='tight')
+              plt.close()
+              print(f"Generated balance chart with {len(bal_history)} data points")
 
           # Summary
           print(f"\n## Benchmark Results (10K transactions)")
-          print(f"rustledger: {rustledger_ms}ms")
-          print(f"beancount:  {beancount_ms}ms ({speedup_beancount}x slower)")
-          print(f"ledger:     {ledger_ms}ms")
-          print(f"hledger:    {hledger_ms}ms")
+          print(f"\nValidation (parse + check):")
+          print(f"  rustledger: {rustledger_val}ms")
+          print(f"  ledger:     {ledger_val}ms")
+          print(f"  hledger:    {hledger_val}ms")
+          print(f"  beancount:  {beancount_val}ms")
+          print(f"\nBalance report (parse + compute):")
+          print(f"  ledger:     {ledger_bal}ms")
+          print(f"  rustledger: {rustledger_bal}ms")
+          print(f"  hledger:    {hledger_bal}ms")
+          print(f"  beancount:  {beancount_bal}ms")
           EOF
         env:
-          RUSTLEDGER_MS: ${{ steps.benchmark.outputs.rustledger_ms }}
-          BEANCOUNT_MS: ${{ steps.benchmark.outputs.beancount_ms }}
-          LEDGER_MS: ${{ steps.benchmark.outputs.ledger_ms }}
-          HLEDGER_MS: ${{ steps.benchmark.outputs.hledger_ms }}
-          SPEEDUP_BEANCOUNT: ${{ steps.benchmark.outputs.speedup_beancount }}
+          RUSTLEDGER_VAL_MS: ${{ steps.bench_validation.outputs.rustledger_val_ms }}
+          BEANCOUNT_VAL_MS: ${{ steps.bench_validation.outputs.beancount_val_ms }}
+          LEDGER_VAL_MS: ${{ steps.bench_validation.outputs.ledger_val_ms }}
+          HLEDGER_VAL_MS: ${{ steps.bench_validation.outputs.hledger_val_ms }}
+          RUSTLEDGER_BAL_MS: ${{ steps.bench_balance.outputs.rustledger_bal_ms }}
+          BEANCOUNT_BAL_MS: ${{ steps.bench_balance.outputs.beancount_bal_ms }}
+          LEDGER_BAL_MS: ${{ steps.bench_balance.outputs.ledger_bal_ms }}
+          HLEDGER_BAL_MS: ${{ steps.bench_balance.outputs.hledger_bal_ms }}
 
       - name: Update summary
         run: |
           cat >> $GITHUB_STEP_SUMMARY << EOF
           ## Benchmark Results (10K transactions)
 
-          | Tool | Time | vs rustledger |
-          |------|------|---------------|
-          | **rustledger** | ${{ steps.benchmark.outputs.rustledger_ms }}ms | - |
-          | Python beancount | ${{ steps.benchmark.outputs.beancount_ms }}ms | ${{ steps.benchmark.outputs.speedup_beancount }}x slower |
-          | ledger | ${{ steps.benchmark.outputs.ledger_ms }}ms | ${{ steps.benchmark.outputs.speedup_ledger }}x slower |
-          | hledger | ${{ steps.benchmark.outputs.hledger_ms }}ms | ${{ steps.benchmark.outputs.speedup_hledger }}x slower |
+          ### Validation (parse + check)
+          | Tool | Time |
+          |------|------|
+          | **rustledger** | ${{ steps.bench_validation.outputs.rustledger_val_ms }}ms |
+          | ledger (C++) | ${{ steps.bench_validation.outputs.ledger_val_ms }}ms |
+          | hledger (Haskell) | ${{ steps.bench_validation.outputs.hledger_val_ms }}ms |
+          | beancount (Python) | ${{ steps.bench_validation.outputs.beancount_val_ms }}ms |
+
+          ### Balance Report (parse + compute)
+          | Tool | Time |
+          |------|------|
+          | ledger (C++) | ${{ steps.bench_balance.outputs.ledger_bal_ms }}ms |
+          | **rustledger** | ${{ steps.bench_balance.outputs.rustledger_bal_ms }}ms |
+          | hledger (Haskell) | ${{ steps.bench_balance.outputs.hledger_bal_ms }}ms |
+          | beancount (Python) | ${{ steps.bench_balance.outputs.beancount_bal_ms }}ms |
 
           *Measured with [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmup)*
+
+          Note: rustledger & beancount use .beancount format; ledger & hledger use .ledger format
           EOF
 
       - name: Commit results to benchmarks branch
