@@ -30,9 +30,10 @@
 #![warn(missing_docs)]
 
 mod error;
-// mod lexer; // Disabled - using direct parser instead
-mod parser;
+pub mod logos_lexer;
 mod span;
+mod token_input;
+mod token_parser;
 
 pub use error::{ParseError, ParseErrorKind};
 pub use span::{Span, Spanned};
@@ -56,8 +57,7 @@ pub struct ParseResult {
 
 /// Parse beancount source code.
 ///
-/// Returns a tuple of (directives, errors). The parser uses error recovery
-/// to continue parsing after encountering errors, so both may be non-empty.
+/// Uses a fast token-based parser (Logos lexer + Chumsky combinators).
 ///
 /// # Arguments
 ///
@@ -67,7 +67,7 @@ pub struct ParseResult {
 ///
 /// A `ParseResult` containing directives, options, includes, plugins, and errors.
 pub fn parse(source: &str) -> ParseResult {
-    parser::parse(source)
+    token_parser::parse(source)
 }
 
 /// Parse beancount source code, returning only directives and errors.

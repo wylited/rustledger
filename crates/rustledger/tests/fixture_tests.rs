@@ -81,16 +81,15 @@ fn test_syntax_edge_cases_parses() {
     }
 
     let (success, error_count) = parse_file(&path);
-    // Note: This file contains some syntax that rustledger may not support yet
-    // (e.g., balance tolerance with ~). Track parse error count for regression.
+    // Note: This file contains some syntax that rustledger may not support yet.
+    // Track parse error count for regression.
     if !success {
         eprintln!(
             "syntax-edge-cases.beancount has {error_count} parse errors (tracking for future fixes)"
         );
-        // Allow up to 1 known parse error for now (balance tolerance ~)
         assert!(
-            error_count <= 1,
-            "syntax-edge-cases.beancount should have at most 1 parse error, got {error_count}"
+            error_count == 0,
+            "syntax-edge-cases.beancount should have 0 parse errors, got {error_count}"
         );
     }
 }
