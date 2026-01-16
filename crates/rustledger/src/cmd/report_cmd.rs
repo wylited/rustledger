@@ -627,12 +627,14 @@ fn report_balsheet<W: Write>(
         }
     }
 
-    // Helper to sum inventory by currency
-    fn sum_by_currency(balances: &BTreeMap<InternedStr, Inventory>) -> BTreeMap<String, Decimal> {
-        let mut totals: BTreeMap<String, Decimal> = BTreeMap::new();
+    // Helper to sum inventory by currency (uses InternedStr to avoid allocations)
+    fn sum_by_currency(
+        balances: &BTreeMap<InternedStr, Inventory>,
+    ) -> BTreeMap<InternedStr, Decimal> {
+        let mut totals: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
         for inv in balances.values() {
             for pos in inv.positions() {
-                *totals.entry(pos.units.currency.to_string()).or_default() += pos.units.number;
+                *totals.entry(pos.units.currency.clone()).or_default() += pos.units.number;
             }
         }
         totals
@@ -668,7 +670,7 @@ fn report_balsheet<W: Write>(
     // Net worth = Assets - Liabilities
     let asset_totals = sum_by_currency(&assets);
     let liability_totals = sum_by_currency(&liabilities);
-    let mut net_worth: BTreeMap<String, Decimal> = asset_totals;
+    let mut net_worth: BTreeMap<InternedStr, Decimal> = asset_totals;
     for (currency, amount) in &liability_totals {
         *net_worth.entry(currency.clone()).or_default() -= amount;
     }
@@ -721,7 +723,7 @@ fn report_balsheet<W: Write>(
                 writer: &mut W,
                 title: &str,
                 balances: &BTreeMap<InternedStr, Inventory>,
-            ) -> Result<BTreeMap<String, Decimal>> {
+            ) -> Result<BTreeMap<InternedStr, Decimal>> {
                 writeln!(writer, "{title}")?;
                 writeln!(writer, "{}", "-".repeat(60))?;
                 for (account, inventory) in balances {
@@ -736,11 +738,10 @@ fn report_balsheet<W: Write>(
                         )?;
                     }
                 }
-                let mut totals: BTreeMap<String, Decimal> = BTreeMap::new();
+                let mut totals: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
                 for inv in balances.values() {
                     for pos in inv.positions() {
-                        *totals.entry(pos.units.currency.to_string()).or_default() +=
-                            pos.units.number;
+                        *totals.entry(pos.units.currency.clone()).or_default() += pos.units.number;
                     }
                 }
                 writeln!(writer)?;
@@ -800,11 +801,13 @@ fn report_income<W: Write>(
         }
     }
 
-    fn sum_by_currency(balances: &BTreeMap<InternedStr, Inventory>) -> BTreeMap<String, Decimal> {
-        let mut totals: BTreeMap<String, Decimal> = BTreeMap::new();
+    fn sum_by_currency(
+        balances: &BTreeMap<InternedStr, Inventory>,
+    ) -> BTreeMap<InternedStr, Decimal> {
+        let mut totals: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
         for inv in balances.values() {
             for pos in inv.positions() {
-                *totals.entry(pos.units.currency.to_string()).or_default() += pos.units.number;
+                *totals.entry(pos.units.currency.clone()).or_default() += pos.units.number;
             }
         }
         totals
@@ -838,7 +841,7 @@ fn report_income<W: Write>(
     // Net income = -(Income) - Expenses (income is negative in double-entry)
     let income_totals = sum_by_currency(&income);
     let expense_totals = sum_by_currency(&expenses);
-    let mut net_income: BTreeMap<String, Decimal> = BTreeMap::new();
+    let mut net_income: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
     for (currency, amount) in &income_totals {
         *net_income.entry(currency.clone()).or_default() -= amount;
     }
@@ -893,7 +896,7 @@ fn report_income<W: Write>(
                 writer: &mut W,
                 title: &str,
                 balances: &BTreeMap<InternedStr, Inventory>,
-            ) -> Result<BTreeMap<String, Decimal>> {
+            ) -> Result<BTreeMap<InternedStr, Decimal>> {
                 writeln!(writer, "{title}")?;
                 writeln!(writer, "{}", "-".repeat(60))?;
                 for (account, inventory) in balances {
@@ -908,11 +911,10 @@ fn report_income<W: Write>(
                         )?;
                     }
                 }
-                let mut totals: BTreeMap<String, Decimal> = BTreeMap::new();
+                let mut totals: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
                 for inv in balances.values() {
                     for pos in inv.positions() {
-                        *totals.entry(pos.units.currency.to_string()).or_default() +=
-                            pos.units.number;
+                        *totals.entry(pos.units.currency.clone()).or_default() += pos.units.number;
                     }
                 }
                 writeln!(writer)?;
@@ -1226,9 +1228,9 @@ fn report_networth<W: Write>(
         return Ok(());
     }
 
-    let mut asset_balance: BTreeMap<String, Decimal> = BTreeMap::new();
-    let mut liability_balance: BTreeMap<String, Decimal> = BTreeMap::new();
-    let mut period_results: Vec<(String, BTreeMap<String, Decimal>)> = Vec::new();
+    let mut asset_balance: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
+    let mut liability_balance: BTreeMap<InternedStr, Decimal> = BTreeMap::new();
+    let mut period_results: Vec<(String, BTreeMap<InternedStr, Decimal>)> = Vec::new();
 
     let format_period = |date: rustledger_core::NaiveDate, period: &str| -> String {
         match period {
@@ -1245,7 +1247,7 @@ fn report_networth<W: Write>(
         let txn_period = format_period(txn.date, period);
 
         if txn_period != current_period && !current_period.is_empty() {
-            let mut net_worth: BTreeMap<String, Decimal> = asset_balance.clone();
+            let mut net_worth: BTreeMap<InternedStr, Decimal> = asset_balance.clone();
             for (currency, amount) in &liability_balance {
                 *net_worth.entry(currency.clone()).or_default() += amount;
             }
@@ -1257,12 +1259,10 @@ fn report_networth<W: Write>(
             if let Some(amount) = posting.amount() {
                 let account_str: &str = &posting.account;
                 if account_str.starts_with("Assets:") {
-                    *asset_balance
-                        .entry(amount.currency.to_string())
-                        .or_default() += amount.number;
+                    *asset_balance.entry(amount.currency.clone()).or_default() += amount.number;
                 } else if account_str.starts_with("Liabilities:") {
                     *liability_balance
-                        .entry(amount.currency.to_string())
+                        .entry(amount.currency.clone())
                         .or_default() += amount.number;
                 }
             }
@@ -1270,7 +1270,7 @@ fn report_networth<W: Write>(
     }
 
     if !current_period.is_empty() {
-        let mut net_worth: BTreeMap<String, Decimal> = asset_balance.clone();
+        let mut net_worth: BTreeMap<InternedStr, Decimal> = asset_balance.clone();
         for (currency, amount) in &liability_balance {
             *net_worth.entry(currency.clone()).or_default() += amount;
         }
