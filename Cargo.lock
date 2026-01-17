@@ -2790,6 +2790,7 @@ dependencies = [
  "rustledger-query",
  "rustledger-validate",
  "rustyline",
+ "serde",
  "serde_json",
  "tracing",
  "tracing-subscriber",

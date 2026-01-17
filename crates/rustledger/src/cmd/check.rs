@@ -4,7 +4,7 @@ use crate::cmd::completions::ShellType;
 use crate::report::{self, SourceCache};
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
 use rustledger_booking::{interpolate, InterpolationError};
 use rustledger_core::Directive;
@@ -16,11 +16,78 @@ use rustledger_loader::{
 use rustledger_plugin::PluginManager;
 use rustledger_plugin::{wrappers_to_directives, NativePluginRegistry, PluginInput, PluginOptions};
 use rustledger_validate::validate;
+use serde::Serialize;
 use std::io::{self, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use tracing::Level;
 use tracing_subscriber::fmt::format::FmtSpan;
+
+/// Output format for diagnostics.
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub enum OutputFormat {
+    /// Human-readable text output (default)
+    #[default]
+    Text,
+    /// JSON output for IDE/tooling integration
+    Json,
+}
+
+/// A diagnostic message in JSON format.
+#[derive(Debug, Serialize)]
+pub struct JsonDiagnostic {
+    /// Source file path
+    pub file: String,
+    /// Line number (1-based)
+    pub line: usize,
+    /// Column number (1-based)
+    pub column: usize,
+    /// End line number (1-based)
+    pub end_line: usize,
+    /// End column number (1-based)
+    pub end_column: usize,
+    /// Severity: "error" or "warning"
+    pub severity: String,
+    /// Error code (e.g., "P0012", "E1001")
+    pub code: String,
+    /// Error message
+    pub message: String,
+    /// Optional hint for fixing the error
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    /// Optional context information
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+/// JSON output structure for all diagnostics.
+#[derive(Debug, Serialize)]
+pub struct JsonOutput {
+    /// List of diagnostics
+    pub diagnostics: Vec<JsonDiagnostic>,
+    /// Total error count
+    pub error_count: usize,
+    /// Total warning count
+    pub warning_count: usize,
+}
+
+/// Convert a byte offset to (line, column) in 1-based indexing.
+fn byte_offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in source.char_indices() {
+        if i >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
 
 /// Validate beancount files and report errors.
 #[derive(Parser, Debug)]
@@ -62,6 +129,10 @@ pub struct Args {
     /// Run built-in native plugins (e.g., `implicit_prices`, `check_commodity`)
     #[arg(long = "native-plugin", value_name = "NAME")]
     pub native_plugins: Vec<String>,
+
+    /// Output format (text or json)
+    #[arg(long, short = 'f', value_enum, default_value = "text")]
+    pub format: OutputFormat,
 }
 
 fn run(args: &Args) -> Result<ExitCode> {
@@ -75,6 +146,10 @@ fn run(args: &Args) -> Result<ExitCode> {
     if !file.exists() {
         anyhow::bail!("file not found: {}", file.display());
     }
+
+    // Collect diagnostics for JSON output
+    let json_mode = matches!(args.format, OutputFormat::Json);
+    let mut diagnostics: Vec<JsonDiagnostic> = Vec::new();
 
     // Try loading from cache first (unless --no-cache)
     let cache_entry = if args.no_cache {
@@ -179,7 +254,8 @@ fn run(args: &Args) -> Result<ExitCode> {
     let mut cache = SourceCache::new();
     for source_file in load_result.source_map.files() {
         let content = std::fs::read_to_string(&source_file.path).unwrap_or_else(|_| String::new());
-        cache.add(&source_file.path.display().to_string(), content);
+        let path_str = source_file.path.display().to_string();
+        cache.add(&path_str, content);
     }
 
     // Also add the main file
@@ -194,26 +270,69 @@ fn run(args: &Args) -> Result<ExitCode> {
     for load_error in &load_result.errors {
         match load_error {
             LoadError::ParseErrors { path, errors } => {
-                if args.quiet {
+                let source = std::fs::read_to_string(path).unwrap_or_default();
+                let path_str = path.display().to_string();
+
+                if json_mode {
+                    for error in errors {
+                        let (start_line, start_col) =
+                            byte_offset_to_line_col(&source, error.span.start);
+                        let (end_line, end_col) = byte_offset_to_line_col(&source, error.span.end);
+                        diagnostics.push(JsonDiagnostic {
+                            file: path_str.clone(),
+                            line: start_line,
+                            column: start_col,
+                            end_line,
+                            end_column: end_col,
+                            severity: "error".to_string(),
+                            code: format!("P{:04}", error.kind_code()),
+                            message: error.message(),
+                            hint: error.hint.clone(),
+                            context: error.context.clone(),
+                        });
+                    }
+                    error_count += errors.len();
+                } else if args.quiet {
                     error_count += errors.len();
                 } else {
-                    let source = std::fs::read_to_string(path).unwrap_or_default();
                     error_count += report::report_parse_errors(errors, path, &source, &mut stdout)?;
                 }
             }
             LoadError::Io { path, source } => {
-                if !args.quiet {
-                    writeln!(
-                        stdout,
-                        "error: failed to read {}: {}",
-                        path.display(),
-                        source
-                    )?;
+                let path_str = path.display().to_string();
+                if json_mode {
+                    diagnostics.push(JsonDiagnostic {
+                        file: path_str,
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 1,
+                        severity: "error".to_string(),
+                        code: "E0001".to_string(),
+                        message: format!("failed to read file: {source}"),
+                        hint: None,
+                        context: None,
+                    });
+                } else if !args.quiet {
+                    writeln!(stdout, "error: failed to read {path_str}: {source}")?;
                 }
                 error_count += 1;
             }
             LoadError::IncludeCycle { cycle } => {
-                if !args.quiet {
+                if json_mode {
+                    diagnostics.push(JsonDiagnostic {
+                        file: cycle.first().cloned().unwrap_or_default(),
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 1,
+                        severity: "error".to_string(),
+                        code: "E0002".to_string(),
+                        message: format!("include cycle detected: {}", cycle.join(" -> ")),
+                        hint: Some("break the cycle by removing one of the includes".to_string()),
+                        context: None,
+                    });
+                } else if !args.quiet {
                     writeln!(
                         stdout,
                         "error: include cycle detected: {}",
@@ -226,7 +345,24 @@ fn run(args: &Args) -> Result<ExitCode> {
                 include_path,
                 base_dir,
             } => {
-                if !args.quiet {
+                if json_mode {
+                    diagnostics.push(JsonDiagnostic {
+                        file: base_dir.display().to_string(),
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 1,
+                        severity: "error".to_string(),
+                        code: "E0003".to_string(),
+                        message: format!(
+                            "path traversal not allowed: {} escapes {}",
+                            include_path,
+                            base_dir.display()
+                        ),
+                        hint: Some("use paths within the base directory".to_string()),
+                        context: None,
+                    });
+                } else if !args.quiet {
                     writeln!(
                         stdout,
                         "error: path traversal not allowed: {} escapes {}",
@@ -237,7 +373,21 @@ fn run(args: &Args) -> Result<ExitCode> {
                 error_count += 1;
             }
             LoadError::Decryption { path, message } => {
-                if !args.quiet {
+                let path_str = path.display().to_string();
+                if json_mode {
+                    diagnostics.push(JsonDiagnostic {
+                        file: path_str,
+                        line: 1,
+                        column: 1,
+                        end_line: 1,
+                        end_column: 1,
+                        severity: "error".to_string(),
+                        code: "E0004".to_string(),
+                        message: format!("failed to decrypt: {message}"),
+                        hint: None,
+                        context: None,
+                    });
+                } else if !args.quiet {
                     writeln!(
                         stdout,
                         "error: failed to decrypt {}: {}",
@@ -251,8 +401,23 @@ fn run(args: &Args) -> Result<ExitCode> {
     }
 
     // Report option warnings (E7001, E7002, E7003)
+    let main_file_str = file.display().to_string();
+    let option_warning_count = load_result.options.warnings.len();
     for warning in &load_result.options.warnings {
-        if !args.quiet {
+        if json_mode {
+            diagnostics.push(JsonDiagnostic {
+                file: main_file_str.clone(),
+                line: 1,
+                column: 1,
+                end_line: 1,
+                end_column: 1,
+                severity: "warning".to_string(),
+                code: warning.code.to_string(),
+                message: warning.message.clone(),
+                hint: None,
+                context: None,
+            });
+        } else if !args.quiet {
             writeln!(stdout, "warning[{}]: {}", warning.code, warning.message)?;
         }
     }
@@ -409,10 +574,27 @@ fn run(args: &Args) -> Result<ExitCode> {
         })
         .collect();
 
-    if !args.quiet && !interpolation_errors.is_empty() {
-        for (date, narration, err) in &interpolation_errors {
-            writeln!(stdout, "error[INTERP]: {err} ({date}, \"{narration}\")")?;
-            writeln!(stdout)?;
+    if !interpolation_errors.is_empty() {
+        if json_mode {
+            for (date, narration, err) in &interpolation_errors {
+                diagnostics.push(JsonDiagnostic {
+                    file: main_file_str.clone(),
+                    line: 1, // Transaction dates don't have line numbers yet
+                    column: 1,
+                    end_line: 1,
+                    end_column: 1,
+                    severity: "error".to_string(),
+                    code: "INTERP".to_string(),
+                    message: format!("{err}"),
+                    hint: None,
+                    context: Some(format!("{date}, \"{narration}\"")),
+                });
+            }
+        } else if !args.quiet {
+            for (date, narration, err) in &interpolation_errors {
+                writeln!(stdout, "error[INTERP]: {err} ({date}, \"{narration}\")")?;
+                writeln!(stdout)?;
+            }
         }
     }
     error_count += interpolation_errors.len();
@@ -423,18 +605,54 @@ fn run(args: &Args) -> Result<ExitCode> {
     }
 
     let validation_errors = validate(&directives);
-    error_count += validation_errors
+    let validation_error_count = validation_errors
         .iter()
         .filter(|e| !e.code.is_warning())
         .count();
+    let validation_warning_count = validation_errors
+        .iter()
+        .filter(|e| e.code.is_warning())
+        .count();
+    error_count += validation_error_count;
 
-    if !args.quiet && !validation_errors.is_empty() {
-        report::report_validation_errors(&validation_errors, &cache, &mut stdout)?;
+    if !validation_errors.is_empty() {
+        if json_mode {
+            for err in &validation_errors {
+                let severity = if err.code.is_warning() {
+                    "warning"
+                } else {
+                    "error"
+                };
+                diagnostics.push(JsonDiagnostic {
+                    file: main_file_str.clone(),
+                    line: 1, // Validation errors don't have precise locations yet
+                    column: 1,
+                    end_line: 1,
+                    end_column: 1,
+                    severity: severity.to_string(),
+                    code: err.code.code().to_string(),
+                    message: err.message.clone(),
+                    hint: None,
+                    context: Some(format!("{}", err.date)),
+                });
+            }
+        } else if !args.quiet {
+            report::report_validation_errors(&validation_errors, &cache, &mut stdout)?;
+        }
     }
 
-    // Print summary
+    // Print summary / output
     let elapsed = start.elapsed();
-    if !args.quiet {
+    let warning_count = option_warning_count + validation_warning_count;
+
+    if json_mode {
+        let output = JsonOutput {
+            diagnostics,
+            error_count,
+            warning_count,
+        };
+        writeln!(stdout, "{}", serde_json::to_string_pretty(&output)?)?;
+    } else if !args.quiet {
         if args.verbose {
             let cache_note = if from_cache { " (from cache)" } else { "" };
             writeln!(
@@ -444,7 +662,7 @@ fn run(args: &Args) -> Result<ExitCode> {
                 cache_note
             )?;
         }
-        report::print_summary(error_count, 0, &mut stdout)?;
+        report::print_summary(error_count, warning_count, &mut stdout)?;
     }
 
     if error_count > 0 {
