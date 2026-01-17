@@ -5,7 +5,6 @@
 //!   rledger-lsp --version    # Print version
 //!   rledger-lsp --help       # Print help
 
-use rustledger_lsp::Server;
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -27,24 +26,27 @@ fn main() -> ExitCode {
         println!("  -V, --version  Print version");
         println!();
         println!("The server communicates via stdio using the Language Server Protocol.");
+        println!();
+        println!("Environment variables:");
+        println!("  RUST_LOG       Set log level (e.g., RUST_LOG=rledger_lsp=debug)");
         return ExitCode::SUCCESS;
     }
 
-    // Initialize tracing
+    // Initialize tracing (logs to stderr, not stdout which is for LSP)
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing::Level::INFO.into()),
+                .add_directive("rledger_lsp=info".parse().unwrap()),
         )
         .with_writer(std::io::stderr)
         .init();
 
     // Run the server
-    let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
-    rt.block_on(async {
-        let server = Server::new();
-        server.run().await;
-    });
-
-    ExitCode::SUCCESS
+    match rustledger_lsp::start_stdio() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            tracing::error!("Server error: {}", e);
+            ExitCode::FAILURE
+        }
+    }
 }

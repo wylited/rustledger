@@ -30,12 +30,14 @@
 
 pub mod db;
 pub mod handlers;
+pub mod main_loop;
 
 mod server;
 mod snapshot;
 mod vfs;
 
-pub use server::Server;
+pub use main_loop::run_main_loop;
+pub use server::{start_stdio, Server};
 pub use snapshot::Snapshot;
 pub use vfs::Vfs;
 
