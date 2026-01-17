@@ -3,9 +3,12 @@
 //! Provides code lenses above:
 //! - Account open directives (showing transaction count)
 //! - Transactions (showing posting count and currencies)
+//! - Balance assertions (with verification status)
+//!
+//! Supports resolve for lazy-loading expensive balance calculations.
 
 use lsp_types::{CodeLens, CodeLensParams, Command, Position, Range};
-use rustledger_core::Directive;
+use rustledger_core::{Decimal, Directive};
 use rustledger_parser::ParseResult;
 use std::collections::HashMap;
 
@@ -91,22 +94,22 @@ pub fn handle_code_lens(
                 });
             }
             Directive::Balance(bal) => {
-                let title = format!(
-                    "Balance assertion: {} {}",
-                    bal.amount.number, bal.amount.currency
-                );
+                // Store data for resolve - verification is deferred
+                let data = serde_json::json!({
+                    "kind": "balance",
+                    "account": bal.account.to_string(),
+                    "date": bal.date.to_string(),
+                    "expected_amount": bal.amount.number.to_string(),
+                    "expected_currency": bal.amount.currency.to_string(),
+                });
 
                 lenses.push(CodeLens {
                     range: Range {
                         start: Position::new(line, 0),
                         end: Position::new(line, 0),
                     },
-                    command: Some(Command {
-                        title,
-                        command: "rledger.showBalanceDetails".to_string(),
-                        arguments: None,
-                    }),
-                    data: None,
+                    command: None, // Resolved lazily
+                    data: Some(data),
                 });
             }
             _ => {}
@@ -118,6 +121,102 @@ pub fn handle_code_lens(
     } else {
         Some(lenses)
     }
+}
+
+/// Handle a code lens resolve request.
+/// Computes expensive balance verification on demand.
+pub fn handle_code_lens_resolve(lens: CodeLens, parse_result: &ParseResult) -> CodeLens {
+    let mut resolved = lens.clone();
+
+    if let Some(data) = &lens.data {
+        if data.get("kind").and_then(|v| v.as_str()) == Some("balance") {
+            let account = data.get("account").and_then(|v| v.as_str()).unwrap_or("");
+            let date_str = data.get("date").and_then(|v| v.as_str()).unwrap_or("");
+            let expected_amount = data
+                .get("expected_amount")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<Decimal>().ok())
+                .unwrap_or_default();
+            let expected_currency = data
+                .get("expected_currency")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+
+            // Parse the date
+            let date = chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d").ok();
+
+            // Calculate actual balance up to this date
+            let actual_balance = calculate_balance_at_date(parse_result, account, date);
+            let actual_amount = actual_balance
+                .get(expected_currency)
+                .copied()
+                .unwrap_or_default();
+
+            // Check if balance matches
+            let (title, status) = if actual_amount == expected_amount {
+                (
+                    format!("✓ Balance: {} {}", expected_amount, expected_currency),
+                    "verified",
+                )
+            } else {
+                let diff = actual_amount - expected_amount;
+                (
+                    format!(
+                        "✗ Balance: expected {} {}, actual {} {} (diff: {})",
+                        expected_amount, expected_currency, actual_amount, expected_currency, diff
+                    ),
+                    "mismatch",
+                )
+            };
+
+            resolved.command = Some(Command {
+                title,
+                command: "rledger.showBalanceDetails".to_string(),
+                arguments: Some(vec![serde_json::json!({
+                    "account": account,
+                    "status": status,
+                    "expected": format!("{} {}", expected_amount, expected_currency),
+                    "actual": format!("{} {}", actual_amount, expected_currency),
+                })]),
+            });
+        }
+    }
+
+    // If no data to resolve, return as-is (already has command)
+    resolved
+}
+
+/// Calculate the balance of an account at a specific date.
+fn calculate_balance_at_date(
+    parse_result: &ParseResult,
+    account: &str,
+    date: Option<chrono::NaiveDate>,
+) -> HashMap<String, Decimal> {
+    let mut balances: HashMap<String, Decimal> = HashMap::new();
+
+    for spanned in &parse_result.directives {
+        if let Directive::Transaction(txn) = &spanned.value {
+            // Only include transactions before the balance date
+            if let Some(d) = date {
+                if txn.date >= d {
+                    continue;
+                }
+            }
+
+            for posting in &txn.postings {
+                if posting.account.as_ref() == account {
+                    if let Some(units) = &posting.units {
+                        if let Some(number) = units.number() {
+                            let currency = units.currency().unwrap_or("???").to_string();
+                            *balances.entry(currency).or_default() += number;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    balances
 }
 
 /// Statistics for an account.
@@ -220,13 +319,82 @@ mod tests {
         assert!(lenses.is_some());
 
         let lenses = lenses.unwrap();
-        // Balance lens should show the amount
+        // Balance lens should have data but no command (resolved lazily)
         let balance_lens = lenses.iter().find(|l| {
-            l.command
+            l.data
                 .as_ref()
-                .map(|c| c.title.contains("Balance assertion"))
-                .unwrap_or(false)
+                .and_then(|d| d.get("kind"))
+                .and_then(|v| v.as_str())
+                == Some("balance")
         });
         assert!(balance_lens.is_some());
+        assert!(balance_lens.unwrap().command.is_none());
+    }
+
+    #[test]
+    fn test_code_lens_resolve_balance_match() {
+        let source = r#"2024-01-01 open Assets:Bank USD
+2024-01-15 * "Deposit"
+  Assets:Bank  100.00 USD
+  Income:Salary
+2024-01-31 balance Assets:Bank 100 USD
+"#;
+        let result = parse(source);
+
+        // Create a code lens like what handle_code_lens would return
+        let lens = CodeLens {
+            range: Range {
+                start: Position::new(4, 0),
+                end: Position::new(4, 0),
+            },
+            command: None,
+            data: Some(serde_json::json!({
+                "kind": "balance",
+                "account": "Assets:Bank",
+                "date": "2024-01-31",
+                "expected_amount": "100",
+                "expected_currency": "USD",
+            })),
+        };
+
+        let resolved = handle_code_lens_resolve(lens, &result);
+        assert!(resolved.command.is_some());
+
+        let cmd = resolved.command.unwrap();
+        assert!(cmd.title.contains("✓")); // Should show checkmark for match
+        assert!(cmd.title.contains("100"));
+    }
+
+    #[test]
+    fn test_code_lens_resolve_balance_mismatch() {
+        let source = r#"2024-01-01 open Assets:Bank USD
+2024-01-15 * "Deposit"
+  Assets:Bank  50.00 USD
+  Income:Salary
+2024-01-31 balance Assets:Bank 100 USD
+"#;
+        let result = parse(source);
+
+        let lens = CodeLens {
+            range: Range {
+                start: Position::new(4, 0),
+                end: Position::new(4, 0),
+            },
+            command: None,
+            data: Some(serde_json::json!({
+                "kind": "balance",
+                "account": "Assets:Bank",
+                "date": "2024-01-31",
+                "expected_amount": "100",
+                "expected_currency": "USD",
+            })),
+        };
+
+        let resolved = handle_code_lens_resolve(lens, &result);
+        assert!(resolved.command.is_some());
+
+        let cmd = resolved.command.unwrap();
+        assert!(cmd.title.contains("✗")); // Should show X for mismatch
+        assert!(cmd.title.contains("diff"));
     }
 }

@@ -8,14 +8,19 @@
 //! - Strings (payees, narrations)
 //! - Keywords (directive types)
 //! - Comments
+//!
+//! Supports full document, range-based, and delta tokenization.
 
 use lsp_types::{
-    SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
-    SemanticTokensFullOptions, SemanticTokensLegend, SemanticTokensOptions, SemanticTokensParams,
-    SemanticTokensResult, SemanticTokensServerCapabilities,
+    Range, SemanticToken, SemanticTokenModifier, SemanticTokenType, SemanticTokens,
+    SemanticTokensDelta, SemanticTokensDeltaParams, SemanticTokensEdit,
+    SemanticTokensFullDeltaResult, SemanticTokensFullOptions, SemanticTokensLegend,
+    SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
 };
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Token types we support.
 pub const TOKEN_TYPES: &[SemanticTokenType] = &[
@@ -44,12 +49,20 @@ pub fn get_legend() -> SemanticTokensLegend {
     }
 }
 
+/// Counter for generating unique result IDs.
+static RESULT_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Generate a new unique result ID.
+fn generate_result_id() -> String {
+    RESULT_ID_COUNTER.fetch_add(1, Ordering::SeqCst).to_string()
+}
+
 /// Get the semantic tokens server capabilities.
 pub fn get_capabilities() -> SemanticTokensServerCapabilities {
     SemanticTokensServerCapabilities::SemanticTokensOptions(SemanticTokensOptions {
         legend: get_legend(),
-        full: Some(SemanticTokensFullOptions::Bool(true)),
-        range: None,
+        full: Some(SemanticTokensFullOptions::Delta { delta: Some(true) }), // Enable delta support
+        range: Some(true), // Enable range-based tokenization
         work_done_progress_options: Default::default(),
     })
 }
@@ -120,10 +133,207 @@ pub fn handle_semantic_tokens(
         None
     } else {
         Some(SemanticTokensResult::Tokens(SemanticTokens {
+            result_id: Some(generate_result_id()),
+            data: tokens,
+        }))
+    }
+}
+
+/// Handle a semantic tokens delta request.
+/// Returns only the changed tokens since the previous result.
+///
+/// Note: For simplicity, this implementation always returns full tokens
+/// when there are changes, using the edit mechanism. A more sophisticated
+/// implementation could compute actual diffs for better performance.
+pub fn handle_semantic_tokens_delta(
+    params: &SemanticTokensDeltaParams,
+    source: &str,
+    parse_result: &ParseResult,
+    previous_tokens: Option<&[SemanticToken]>,
+) -> Option<SemanticTokensFullDeltaResult> {
+    // Compute current tokens
+    let mut current_tokens = Vec::new();
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
+
+    let mut raw_tokens: Vec<RawToken> = Vec::new();
+    for spanned in &parse_result.directives {
+        collect_directive_tokens(&spanned.value, spanned.span.start, source, &mut raw_tokens);
+    }
+    raw_tokens.sort_by_key(|t| (t.line, t.start));
+
+    for raw in raw_tokens {
+        let delta_line = raw.line - prev_line;
+        let delta_start = if delta_line == 0 {
+            raw.start - prev_start
+        } else {
+            raw.start
+        };
+
+        current_tokens.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length: raw.length,
+            token_type: raw.token_type,
+            token_modifiers_bitset: raw.modifiers,
+        });
+
+        prev_line = raw.line;
+        prev_start = raw.start;
+    }
+
+    // If we have previous tokens and they match, return empty delta
+    if let Some(prev) = previous_tokens {
+        if tokens_equal(prev, &current_tokens) {
+            return Some(SemanticTokensFullDeltaResult::TokensDelta(
+                SemanticTokensDelta {
+                    result_id: Some(generate_result_id()),
+                    edits: vec![], // No changes
+                },
+            ));
+        }
+    }
+
+    // Tokens changed - return full replacement as a single edit
+    // This replaces all tokens from index 0
+    let new_result_id = generate_result_id();
+    let _ = params; // Used for previous_result_id validation in a more complete impl
+
+    if current_tokens.is_empty() && previous_tokens.map(|t| t.is_empty()).unwrap_or(true) {
+        return None;
+    }
+
+    let prev_len = previous_tokens.map(|t| t.len()).unwrap_or(0);
+
+    Some(SemanticTokensFullDeltaResult::TokensDelta(
+        SemanticTokensDelta {
+            result_id: Some(new_result_id),
+            edits: vec![SemanticTokensEdit {
+                start: 0,
+                delete_count: prev_len as u32,
+                data: Some(current_tokens),
+            }],
+        },
+    ))
+}
+
+/// Check if two token arrays are equal.
+fn tokens_equal(a: &[SemanticToken], b: &[SemanticToken]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b.iter()).all(|(x, y)| {
+        x.delta_line == y.delta_line
+            && x.delta_start == y.delta_start
+            && x.length == y.length
+            && x.token_type == y.token_type
+            && x.token_modifiers_bitset == y.token_modifiers_bitset
+    })
+}
+
+/// Handle a semantic tokens range request.
+/// Only tokenizes directives within the requested range for better performance.
+pub fn handle_semantic_tokens_range(
+    params: &SemanticTokensRangeParams,
+    source: &str,
+    parse_result: &ParseResult,
+) -> Option<SemanticTokensRangeResult> {
+    let range = params.range;
+    let mut tokens = Vec::new();
+    let mut prev_line = 0u32;
+    let mut prev_start = 0u32;
+
+    // Collect tokens only from directives within the range
+    let mut raw_tokens: Vec<RawToken> = Vec::new();
+
+    for spanned in &parse_result.directives {
+        let (dir_line, _) = byte_offset_to_position(source, spanned.span.start);
+
+        // Skip directives before the range
+        if dir_line > range.end.line {
+            continue;
+        }
+
+        // Skip directives after the range (estimate end based on directive type)
+        let estimated_end_line = estimate_directive_end_line(dir_line, &spanned.value);
+        if estimated_end_line < range.start.line {
+            continue;
+        }
+
+        collect_directive_tokens(&spanned.value, spanned.span.start, source, &mut raw_tokens);
+    }
+
+    // Sort tokens by position
+    raw_tokens.sort_by_key(|t| (t.line, t.start));
+
+    // Filter tokens within range and convert to delta-encoded
+    for raw in raw_tokens {
+        // Skip tokens outside the requested range
+        if !is_token_in_range(&raw, &range) {
+            continue;
+        }
+
+        let delta_line = raw.line - prev_line;
+        let delta_start = if delta_line == 0 {
+            raw.start - prev_start
+        } else {
+            raw.start
+        };
+
+        tokens.push(SemanticToken {
+            delta_line,
+            delta_start,
+            length: raw.length,
+            token_type: raw.token_type,
+            token_modifiers_bitset: raw.modifiers,
+        });
+
+        prev_line = raw.line;
+        prev_start = raw.start;
+    }
+
+    if tokens.is_empty() {
+        None
+    } else {
+        Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
             result_id: None,
             data: tokens,
         }))
     }
+}
+
+/// Estimate the end line of a directive for range filtering.
+fn estimate_directive_end_line(start_line: u32, directive: &Directive) -> u32 {
+    match directive {
+        Directive::Transaction(txn) => {
+            // Transaction spans header + postings
+            start_line + 1 + txn.postings.len() as u32
+        }
+        _ => {
+            // Most directives are single line
+            start_line
+        }
+    }
+}
+
+/// Check if a token is within the requested range.
+fn is_token_in_range(token: &RawToken, range: &Range) -> bool {
+    // Token line must be within range
+    if token.line < range.start.line || token.line > range.end.line {
+        return false;
+    }
+
+    // If on start line, token must start at or after range start
+    if token.line == range.start.line && token.start < range.start.character {
+        return false;
+    }
+
+    // If on end line, token must end at or before range end
+    if token.line == range.end.line && token.start + token.length > range.end.character {
+        return false;
+    }
+
+    true
 }
 
 /// A raw token before delta encoding.
@@ -484,5 +694,190 @@ mod tests {
             // Should have tokens for: date, keyword, account, currency
             assert!(!tokens.data.is_empty());
         }
+    }
+
+    #[test]
+    fn test_semantic_tokens_range() {
+        let source = r#"2024-01-01 open Assets:Bank USD
+2024-01-15 * "Coffee"
+  Assets:Bank  -5.00 USD
+  Expenses:Food
+2024-01-20 close Assets:OldAccount
+"#;
+        let result = parse(source);
+
+        // Request tokens only for lines 1-3 (the transaction)
+        let params = SemanticTokensRangeParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: "file:///test.beancount".parse().unwrap(),
+            },
+            range: Range {
+                start: lsp_types::Position::new(1, 0),
+                end: lsp_types::Position::new(3, 100),
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let response = handle_semantic_tokens_range(&params, source, &result);
+        assert!(response.is_some());
+
+        if let Some(SemanticTokensRangeResult::Tokens(tokens)) = response {
+            // Should have tokens, but fewer than full document
+            assert!(!tokens.data.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_is_token_in_range() {
+        let token = RawToken {
+            line: 5,
+            start: 10,
+            length: 5,
+            token_type: 0,
+            modifiers: 0,
+        };
+
+        // Token fully in range
+        let range = Range {
+            start: lsp_types::Position::new(0, 0),
+            end: lsp_types::Position::new(10, 100),
+        };
+        assert!(is_token_in_range(&token, &range));
+
+        // Token before range
+        let range = Range {
+            start: lsp_types::Position::new(6, 0),
+            end: lsp_types::Position::new(10, 100),
+        };
+        assert!(!is_token_in_range(&token, &range));
+
+        // Token after range
+        let range = Range {
+            start: lsp_types::Position::new(0, 0),
+            end: lsp_types::Position::new(4, 100),
+        };
+        assert!(!is_token_in_range(&token, &range));
+    }
+
+    #[test]
+    fn test_semantic_tokens_delta_no_change() {
+        let source = "2024-01-01 open Assets:Bank USD\n";
+        let result = parse(source);
+
+        // Get initial tokens
+        let params = SemanticTokensParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: "file:///test.beancount".parse().unwrap(),
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let initial = handle_semantic_tokens(&params, source, &result);
+        let initial_tokens = match initial {
+            Some(SemanticTokensResult::Tokens(t)) => t.data,
+            _ => panic!("Expected tokens"),
+        };
+
+        // Request delta with same source
+        let delta_params = SemanticTokensDeltaParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: "file:///test.beancount".parse().unwrap(),
+            },
+            previous_result_id: "0".to_string(),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let delta =
+            handle_semantic_tokens_delta(&delta_params, source, &result, Some(&initial_tokens));
+        assert!(delta.is_some());
+
+        // Should return empty edits since nothing changed
+        if let Some(SemanticTokensFullDeltaResult::TokensDelta(d)) = delta {
+            assert!(d.edits.is_empty());
+        } else {
+            panic!("Expected delta result");
+        }
+    }
+
+    #[test]
+    fn test_semantic_tokens_delta_with_change() {
+        // Use significantly different sources to ensure different tokens
+        let source1 = "2024-01-01 open Assets:Bank USD\n";
+        let source2 = r#"2024-01-01 open Assets:Bank USD
+2024-01-15 * "Coffee"
+  Assets:Bank  -5.00 USD
+  Expenses:Food
+"#;
+
+        let result1 = parse(source1);
+        let result2 = parse(source2);
+
+        // Get initial tokens
+        let params = SemanticTokensParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: "file:///test.beancount".parse().unwrap(),
+            },
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+        let initial = handle_semantic_tokens(&params, source1, &result1);
+        let initial_tokens = match initial {
+            Some(SemanticTokensResult::Tokens(t)) => t.data,
+            _ => panic!("Expected tokens"),
+        };
+
+        // Request delta with changed source
+        let delta_params = SemanticTokensDeltaParams {
+            text_document: lsp_types::TextDocumentIdentifier {
+                uri: "file:///test.beancount".parse().unwrap(),
+            },
+            previous_result_id: "0".to_string(),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        };
+
+        let delta =
+            handle_semantic_tokens_delta(&delta_params, source2, &result2, Some(&initial_tokens));
+        assert!(delta.is_some());
+
+        // Should return edits since source changed significantly
+        if let Some(SemanticTokensFullDeltaResult::TokensDelta(d)) = delta {
+            assert!(
+                !d.edits.is_empty(),
+                "Expected non-empty edits for changed source"
+            );
+            // The edit should contain the new tokens
+            assert!(d.edits[0].data.is_some());
+            // New source has more directives, so should have more tokens
+            let new_tokens = d.edits[0].data.as_ref().unwrap();
+            assert!(new_tokens.len() > initial_tokens.len());
+        } else {
+            panic!("Expected delta result");
+        }
+    }
+
+    #[test]
+    fn test_tokens_equal() {
+        let tokens1 = vec![SemanticToken {
+            delta_line: 0,
+            delta_start: 0,
+            length: 10,
+            token_type: 0,
+            token_modifiers_bitset: 0,
+        }];
+        let tokens2 = tokens1.clone();
+        let tokens3 = vec![SemanticToken {
+            delta_line: 0,
+            delta_start: 0,
+            length: 11, // Different length
+            token_type: 0,
+            token_modifiers_bitset: 0,
+        }];
+
+        assert!(tokens_equal(&tokens1, &tokens2));
+        assert!(!tokens_equal(&tokens1, &tokens3));
+        assert!(!tokens_equal(&tokens1, &[]));
     }
 }

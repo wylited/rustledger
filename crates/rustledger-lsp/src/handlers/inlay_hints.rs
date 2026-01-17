@@ -3,6 +3,8 @@
 //! Provides inlay hints for:
 //! - Inferred amounts on postings without explicit amounts
 //! - Running balances (future enhancement)
+//!
+//! Supports resolve for lazy-loading rich tooltips with account details.
 
 use lsp_types::{InlayHint, InlayHintKind, InlayHintLabel, InlayHintParams, Position};
 use rustledger_core::{Decimal, Directive};
@@ -48,17 +50,23 @@ pub fn handle_inlay_hints(
                             let indent = line.len() - line.trim_start().len();
                             let end_col = indent + trimmed.len();
 
+                            // Store data for resolve - include account for rich tooltip
+                            let data = serde_json::json!({
+                                "kind": "inferred_amount",
+                                "account": posting.account.to_string(),
+                                "amount": amount.to_string(),
+                                "currency": currency,
+                            });
+
                             hints.push(InlayHint {
                                 position: Position::new(posting_line, end_col as u32),
                                 label: InlayHintLabel::String(format!("  {} {}", amount, currency)),
                                 kind: Some(InlayHintKind::TYPE),
                                 text_edits: None,
-                                tooltip: Some(lsp_types::InlayHintTooltip::String(
-                                    "Inferred amount to balance transaction".to_string(),
-                                )),
+                                tooltip: None, // Resolved lazily
                                 padding_left: Some(true),
                                 padding_right: None,
-                                data: None,
+                                data: Some(data),
                             });
                         }
                     }
@@ -72,6 +80,80 @@ pub fn handle_inlay_hints(
     } else {
         Some(hints)
     }
+}
+
+/// Handle an inlay hint resolve request.
+/// Adds rich tooltip with account balance information.
+pub fn handle_inlay_hint_resolve(hint: InlayHint, parse_result: &ParseResult) -> InlayHint {
+    let mut resolved = hint.clone();
+
+    // Check if we have data to resolve
+    if let Some(data) = &hint.data {
+        if let Some(kind) = data.get("kind").and_then(|v| v.as_str()) {
+            if kind == "inferred_amount" {
+                let account = data.get("account").and_then(|v| v.as_str()).unwrap_or("");
+                let amount = data.get("amount").and_then(|v| v.as_str()).unwrap_or("");
+                let currency = data.get("currency").and_then(|v| v.as_str()).unwrap_or("");
+
+                // Build rich tooltip with account information
+                let tooltip = build_account_tooltip(account, amount, currency, parse_result);
+                resolved.tooltip = Some(lsp_types::InlayHintTooltip::MarkupContent(
+                    lsp_types::MarkupContent {
+                        kind: lsp_types::MarkupKind::Markdown,
+                        value: tooltip,
+                    },
+                ));
+            }
+        }
+    }
+
+    resolved
+}
+
+/// Build a rich tooltip for an inferred amount hint.
+fn build_account_tooltip(
+    account: &str,
+    inferred_amount: &str,
+    currency: &str,
+    parse_result: &ParseResult,
+) -> String {
+    let mut balances: HashMap<String, Decimal> = HashMap::new();
+    let mut transaction_count = 0;
+
+    // Calculate running balance for this account
+    for spanned in &parse_result.directives {
+        if let Directive::Transaction(txn) = &spanned.value {
+            for posting in &txn.postings {
+                if posting.account.as_ref() == account {
+                    transaction_count += 1;
+                    if let Some(units) = &posting.units {
+                        if let Some(number) = units.number() {
+                            let curr = units.currency().unwrap_or("???").to_string();
+                            *balances.entry(curr).or_default() += number;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let mut tooltip = format!("**Inferred:** {} {}\n\n", inferred_amount, currency);
+    tooltip.push_str(&format!("**Account:** `{}`\n\n", account));
+
+    if transaction_count > 0 {
+        tooltip.push_str(&format!("📊 {} transactions\n\n", transaction_count));
+
+        if !balances.is_empty() {
+            tooltip.push_str("**Current Balance:**\n");
+            for (curr, amount) in &balances {
+                tooltip.push_str(&format!("- {} {}\n", amount, curr));
+            }
+        }
+    } else {
+        tooltip.push_str("_First transaction for this account_");
+    }
+
+    tooltip
 }
 
 /// Calculate the inferred amount for a transaction with one empty posting.
@@ -174,6 +256,45 @@ mod tests {
                 assert_eq!(amount, Decimal::new(1000, 2)); // 10.00
                 assert_eq!(currency, "USD");
             }
+        }
+    }
+
+    #[test]
+    fn test_inlay_hint_resolve() {
+        let source = r#"2024-01-15 * "Coffee"
+  Assets:Bank  -5.00 USD
+  Expenses:Food
+2024-01-20 * "Lunch"
+  Assets:Bank  -10.00 USD
+  Expenses:Food
+"#;
+        let result = parse(source);
+
+        // Create a hint with data that would be resolved
+        let hint = InlayHint {
+            position: Position::new(2, 15),
+            label: InlayHintLabel::String("  5.00 USD".to_string()),
+            kind: Some(InlayHintKind::TYPE),
+            text_edits: None,
+            tooltip: None,
+            padding_left: Some(true),
+            padding_right: None,
+            data: Some(serde_json::json!({
+                "kind": "inferred_amount",
+                "account": "Expenses:Food",
+                "amount": "5.00",
+                "currency": "USD",
+            })),
+        };
+
+        let resolved = handle_inlay_hint_resolve(hint, &result);
+
+        // Should now have a tooltip
+        assert!(resolved.tooltip.is_some());
+
+        if let Some(lsp_types::InlayHintTooltip::MarkupContent(content)) = resolved.tooltip {
+            assert!(content.value.contains("Expenses:Food"));
+            assert!(content.value.contains("2 transactions"));
         }
     }
 }

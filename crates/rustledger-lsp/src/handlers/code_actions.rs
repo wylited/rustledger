@@ -4,10 +4,12 @@
 //! - Adding missing account open directives
 //! - Balancing transaction postings
 //! - Formatting amounts consistently
+//!
+//! Supports resolve for lazy-loading workspace edits.
 
 use lsp_types::{
     CodeAction, CodeActionKind, CodeActionParams, CodeActionResponse, Position, Range, TextEdit,
-    WorkspaceEdit,
+    Uri, WorkspaceEdit,
 };
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
@@ -40,7 +42,7 @@ pub fn handle_code_actions(
     for account in undefined_accounts {
         // Check if this account is on or near the selected range
         if is_account_in_range(source, &account, range, parse_result) {
-            let action = create_open_directive_action(&uri, source, &account, parse_result);
+            let action = create_open_directive_action(&uri, &account);
             actions.push(action);
         }
     }
@@ -145,18 +147,67 @@ fn is_account_in_range(
 }
 
 /// Create a code action to add an open directive for an account.
+/// The edit is deferred to the resolve phase for better performance.
+fn create_open_directive_action(uri: &Uri, account: &str) -> CodeAction {
+    // Store data for resolve - the actual edit will be computed lazily
+    let data = serde_json::json!({
+        "kind": "add_open_directive",
+        "account": account,
+        "uri": uri.as_str(),
+    });
+
+    CodeAction {
+        title: format!("Add 'open {}' directive", account),
+        kind: Some(CodeActionKind::QUICKFIX),
+        diagnostics: None,
+        edit: None, // Resolved lazily
+        command: None,
+        is_preferred: Some(true),
+        disabled: None,
+        data: Some(data),
+    }
+}
+
+/// Handle a code action resolve request.
+/// Computes the workspace edit for a code action.
 #[allow(clippy::mutable_key_type)] // Uri is required as key by LSP WorkspaceEdit API
-fn create_open_directive_action(
-    uri: &lsp_types::Uri,
+pub fn handle_code_action_resolve(
+    action: CodeAction,
+    source: &str,
+    parse_result: &ParseResult,
+    uri: &Uri,
+) -> CodeAction {
+    let mut resolved = action.clone();
+
+    if let Some(data) = &action.data {
+        if data.get("kind").and_then(|v| v.as_str()) == Some("add_open_directive") {
+            if let Some(account) = data.get("account").and_then(|v| v.as_str()) {
+                resolved.edit = Some(compute_open_directive_edit(
+                    uri,
+                    source,
+                    account,
+                    parse_result,
+                ));
+            }
+        }
+    }
+
+    resolved
+}
+
+/// Compute the workspace edit for adding an open directive.
+#[allow(clippy::mutable_key_type)] // Uri is required as key by LSP WorkspaceEdit API
+fn compute_open_directive_edit(
+    uri: &Uri,
     source: &str,
     account: &str,
     parse_result: &ParseResult,
-) -> CodeAction {
+) -> WorkspaceEdit {
     // Find the earliest date in the file or use a default
     let earliest_date =
         find_earliest_date(parse_result).unwrap_or_else(|| "2000-01-01".to_string());
 
-    // Find where to insert the open directive (at the beginning of the file after any options)
+    // Find where to insert the open directive
     let insert_position = find_open_directive_position(source, parse_result);
 
     let new_text = format!("{} open {}\n", earliest_date, account);
@@ -173,19 +224,10 @@ fn create_open_directive_action(
         }],
     );
 
-    CodeAction {
-        title: format!("Add 'open {}' directive", account),
-        kind: Some(CodeActionKind::QUICKFIX),
-        diagnostics: None,
-        edit: Some(WorkspaceEdit {
-            changes: Some(changes),
-            document_changes: None,
-            change_annotations: None,
-        }),
-        command: None,
-        is_preferred: Some(true),
-        disabled: None,
-        data: None,
+    WorkspaceEdit {
+        changes: Some(changes),
+        document_changes: None,
+        change_annotations: None,
     }
 }
 
@@ -335,5 +377,48 @@ mod tests {
         let result = parse(source);
         let earliest = find_earliest_date(&result);
         assert_eq!(earliest, Some("2024-01-01".to_string()));
+    }
+
+    #[test]
+    #[allow(clippy::mutable_key_type)] // Uri has interior mutability but is safe in tests
+    fn test_code_action_resolve() {
+        let source = r#"
+2024-01-01 open Assets:Bank USD
+2024-01-15 * "Coffee"
+  Assets:Bank  -5.00 USD
+  Expenses:Food
+"#;
+        let result = parse(source);
+        let uri: Uri = "file:///test.beancount".parse().unwrap();
+
+        // Create a code action with data (as returned by handle_code_actions)
+        let action = CodeAction {
+            title: "Add 'open Expenses:Food' directive".to_string(),
+            kind: Some(CodeActionKind::QUICKFIX),
+            diagnostics: None,
+            edit: None, // Not resolved yet
+            command: None,
+            is_preferred: Some(true),
+            disabled: None,
+            data: Some(serde_json::json!({
+                "kind": "add_open_directive",
+                "account": "Expenses:Food",
+                "uri": uri.as_str(),
+            })),
+        };
+
+        let resolved = handle_code_action_resolve(action, source, &result, &uri);
+
+        // Should now have an edit
+        assert!(resolved.edit.is_some());
+
+        let edit = resolved.edit.unwrap();
+        let changes = edit.changes.unwrap();
+        let edits = changes.get(&uri).unwrap();
+
+        // Should insert an open directive
+        assert_eq!(edits.len(), 1);
+        assert!(edits[0].new_text.contains("open Expenses:Food"));
+        assert!(edits[0].new_text.contains("2024-01-01")); // Earliest date
     }
 }

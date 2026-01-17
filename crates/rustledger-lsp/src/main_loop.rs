@@ -8,8 +8,8 @@
 use crate::handlers::call_hierarchy::{
     handle_incoming_calls, handle_outgoing_calls, handle_prepare_call_hierarchy,
 };
-use crate::handlers::code_actions::handle_code_actions;
-use crate::handlers::code_lens::handle_code_lens;
+use crate::handlers::code_actions::{handle_code_action_resolve, handle_code_actions};
+use crate::handlers::code_lens::{handle_code_lens, handle_code_lens_resolve};
 use crate::handlers::completion::handle_completion;
 use crate::handlers::completion_resolve::handle_completion_resolve;
 use crate::handlers::declaration::handle_goto_declaration;
@@ -17,19 +17,21 @@ use crate::handlers::definition::handle_goto_definition;
 use crate::handlers::diagnostics::parse_errors_to_diagnostics;
 use crate::handlers::document_color::{handle_color_presentation, handle_document_color};
 use crate::handlers::document_highlight::handle_document_highlight;
-use crate::handlers::document_links::handle_document_links;
+use crate::handlers::document_links::{handle_document_link_resolve, handle_document_links};
 use crate::handlers::execute_command::handle_execute_command;
 use crate::handlers::folding::handle_folding_ranges;
 use crate::handlers::formatting::handle_formatting;
 use crate::handlers::hover::handle_hover;
-use crate::handlers::inlay_hints::handle_inlay_hints;
+use crate::handlers::inlay_hints::{handle_inlay_hint_resolve, handle_inlay_hints};
 use crate::handlers::linked_editing::handle_linked_editing_range;
 use crate::handlers::on_type_formatting::handle_on_type_formatting;
 use crate::handlers::range_formatting::handle_range_formatting;
 use crate::handlers::references::handle_references;
 use crate::handlers::rename::{handle_prepare_rename, handle_rename};
 use crate::handlers::selection_range::handle_selection_range;
-use crate::handlers::semantic_tokens::handle_semantic_tokens;
+use crate::handlers::semantic_tokens::{
+    handle_semantic_tokens, handle_semantic_tokens_delta, handle_semantic_tokens_range,
+};
 use crate::handlers::signature_help::handle_signature_help;
 use crate::handlers::symbols::handle_document_symbols;
 use crate::handlers::type_hierarchy::{
@@ -40,31 +42,35 @@ use crate::snapshot::bump_revision;
 use crate::vfs::Vfs;
 use crossbeam_channel::{Receiver, Sender};
 use lsp_types::notification::{
-    DidChangeTextDocument, DidCloseTextDocument, DidOpenTextDocument, Notification,
-    PublishDiagnostics,
+    DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument,
+    Notification, PublishDiagnostics,
 };
 use lsp_types::request::{
     CallHierarchyIncomingCalls, CallHierarchyOutgoingCalls, CallHierarchyPrepare,
-    CodeActionRequest, CodeLensRequest, ColorPresentationRequest, Completion, DocumentColor,
-    DocumentHighlightRequest, DocumentLinkRequest, DocumentSymbolRequest, ExecuteCommand,
+    CodeActionRequest, CodeActionResolveRequest, CodeLensRequest, CodeLensResolve,
+    ColorPresentationRequest, Completion, DocumentColor, DocumentHighlightRequest,
+    DocumentLinkRequest, DocumentLinkResolve, DocumentSymbolRequest, ExecuteCommand,
     FoldingRangeRequest, Formatting, GotoDeclaration, GotoDefinition, HoverRequest, Initialize,
-    InlayHintRequest, LinkedEditingRange, OnTypeFormatting, PrepareRenameRequest, RangeFormatting,
-    References, Rename, Request, ResolveCompletionItem, SelectionRangeRequest,
-    SemanticTokensFullRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
+    InlayHintRequest, InlayHintResolveRequest, LinkedEditingRange, OnTypeFormatting,
+    PrepareRenameRequest, RangeFormatting, References, Rename, Request, ResolveCompletionItem,
+    SelectionRangeRequest, SemanticTokensFullDeltaRequest, SemanticTokensFullRequest,
+    SemanticTokensRangeRequest, Shutdown, SignatureHelpRequest, TypeHierarchyPrepare,
     TypeHierarchySubtypes, TypeHierarchySupertypes, WorkspaceSymbolRequest,
 };
 use lsp_types::{
     CallHierarchyIncomingCallsParams, CallHierarchyOutgoingCallsParams, CallHierarchyPrepareParams,
-    CodeActionParams, CodeLensParams, ColorPresentationParams, CompletionItem, CompletionParams,
-    DiagnosticOptions, DiagnosticServerCapabilities, DocumentColorParams, DocumentFormattingParams,
-    DocumentHighlightParams, DocumentLinkParams, DocumentOnTypeFormattingParams,
-    DocumentRangeFormattingParams, DocumentSymbolParams, ExecuteCommandParams, FoldingRangeParams,
-    GotoDefinitionParams, HoverParams, InitializeParams, InitializeResult, InlayHintParams,
+    CodeAction, CodeActionParams, CodeLens, CodeLensParams, ColorPresentationParams,
+    CompletionItem, CompletionParams, DiagnosticOptions, DiagnosticServerCapabilities,
+    DocumentColorParams, DocumentFormattingParams, DocumentHighlightParams, DocumentLink,
+    DocumentLinkParams, DocumentOnTypeFormattingParams, DocumentRangeFormattingParams,
+    DocumentSymbolParams, ExecuteCommandParams, FoldingRangeParams, GotoDefinitionParams,
+    HoverParams, InitializeParams, InitializeResult, InlayHint, InlayHintParams,
     LinkedEditingRangeParams, PublishDiagnosticsParams, ReferenceParams, RenameParams,
-    SelectionRangeParams, SemanticTokensParams, ServerCapabilities, ServerInfo,
-    SignatureHelpParams, TextDocumentPositionParams, TextDocumentSyncCapability,
-    TextDocumentSyncKind, TypeHierarchyPrepareParams, TypeHierarchySubtypesParams,
-    TypeHierarchySupertypesParams, Uri, WorkspaceSymbolParams,
+    SelectionRangeParams, SemanticTokensDeltaParams, SemanticTokensParams,
+    SemanticTokensRangeParams, ServerCapabilities, ServerInfo, SignatureHelpParams,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind,
+    TypeHierarchyPrepareParams, TypeHierarchySubtypesParams, TypeHierarchySupertypesParams, Uri,
+    WorkspaceSymbolParams,
 };
 use parking_lot::RwLock;
 use rustledger_parser::parse;
@@ -180,14 +186,21 @@ impl MainLoopState {
             HoverRequest::METHOD => self.handle_hover_request(req),
             DocumentSymbolRequest::METHOD => self.handle_document_symbols_request(req),
             SemanticTokensFullRequest::METHOD => self.handle_semantic_tokens_request(req),
+            SemanticTokensFullDeltaRequest::METHOD => {
+                self.handle_semantic_tokens_delta_request(req)
+            }
+            SemanticTokensRangeRequest::METHOD => self.handle_semantic_tokens_range_request(req),
             CodeActionRequest::METHOD => self.handle_code_action_request(req),
+            CodeActionResolveRequest::METHOD => self.handle_code_action_resolve_request(req),
             WorkspaceSymbolRequest::METHOD => self.handle_workspace_symbol_request(req),
             PrepareRenameRequest::METHOD => self.handle_prepare_rename_request(req),
             Rename::METHOD => self.handle_rename_request(req),
             Formatting::METHOD => self.handle_formatting_request(req),
             RangeFormatting::METHOD => self.handle_range_formatting_request(req),
             DocumentLinkRequest::METHOD => self.handle_document_link_request(req),
+            DocumentLinkResolve::METHOD => self.handle_document_link_resolve_request(req),
             InlayHintRequest::METHOD => self.handle_inlay_hint_request(req),
+            InlayHintResolveRequest::METHOD => self.handle_inlay_hint_resolve_request(req),
             SelectionRangeRequest::METHOD => self.handle_selection_range_request(req),
             FoldingRangeRequest::METHOD => self.handle_folding_range_request(req),
             TypeHierarchyPrepare::METHOD => self.handle_prepare_type_hierarchy_request(req),
@@ -197,6 +210,7 @@ impl MainLoopState {
             LinkedEditingRange::METHOD => self.handle_linked_editing_range_request(req),
             OnTypeFormatting::METHOD => self.handle_on_type_formatting_request(req),
             CodeLensRequest::METHOD => self.handle_code_lens_request(req),
+            CodeLensResolve::METHOD => self.handle_code_lens_resolve_request(req),
             DocumentColor::METHOD => self.handle_document_color_request(req),
             ColorPresentationRequest::METHOD => self.handle_color_presentation_request(req),
             GotoDeclaration::METHOD => self.handle_goto_declaration_request(req),
@@ -399,6 +413,61 @@ impl MainLoopState {
         serde_json::to_value(response).map_err(|e| e.to_string())
     }
 
+    /// Handle the textDocument/semanticTokens/full/delta request.
+    fn handle_semantic_tokens_delta_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: SemanticTokensDeltaParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle semantic tokens delta
+        // Note: For a full implementation, we would store previous tokens by result_id
+        // and pass them to handle_semantic_tokens_delta. For now, pass None to always
+        // return full tokens as a delta.
+        let response = handle_semantic_tokens_delta(&params, &text, &parse_result, None);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/semanticTokens/range request.
+    fn handle_semantic_tokens_range_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: SemanticTokensRangeParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle semantic tokens for range
+        let response = handle_semantic_tokens_range(&params, &text, &parse_result);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
     /// Handle the textDocument/codeAction request.
     fn handle_code_action_request(
         &self,
@@ -423,6 +492,39 @@ impl MainLoopState {
         let response = handle_code_actions(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the codeAction/resolve request.
+    fn handle_code_action_resolve_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let action: CodeAction = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        // Get the document URI from the action's data
+        let uri: Uri = if let Some(data) = &action.data {
+            data.get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| "file:///unknown".parse().unwrap())
+        } else {
+            "file:///unknown".parse().unwrap()
+        };
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(&uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Resolve the code action
+        let resolved = handle_code_action_resolve(action, &text, &parse_result, &uri);
+
+        serde_json::to_value(resolved).map_err(|e| e.to_string())
     }
 
     /// Handle the workspace/symbol request.
@@ -602,6 +704,18 @@ impl MainLoopState {
         serde_json::to_value(response).map_err(|e| e.to_string())
     }
 
+    /// Handle the documentLink/resolve request.
+    fn handle_document_link_resolve_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let link: DocumentLink = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let resolved = handle_document_link_resolve(link);
+
+        serde_json::to_value(resolved).map_err(|e| e.to_string())
+    }
+
     /// Handle the textDocument/inlayHint request.
     fn handle_inlay_hint_request(
         &self,
@@ -626,6 +740,33 @@ impl MainLoopState {
         let response = handle_inlay_hints(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the inlayHint/resolve request.
+    fn handle_inlay_hint_resolve_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let hint: InlayHint = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        // We need to get the document to resolve the hint
+        // Get path first, then release lock before getting content
+        let path = {
+            let vfs = self.vfs.read();
+            let p = vfs.paths().next().cloned();
+            p
+        };
+
+        let text = if let Some(path) = path {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let parse_result = parse(&text);
+        let resolved = handle_inlay_hint_resolve(hint, &parse_result);
+
+        serde_json::to_value(resolved).map_err(|e| e.to_string())
     }
 
     /// Handle the textDocument/selectionRange request.
@@ -831,6 +972,32 @@ impl MainLoopState {
         let response = handle_code_lens(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the codeLens/resolve request.
+    fn handle_code_lens_resolve_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let lens: CodeLens = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        // Get document from VFS (we need to find it from stored lenses or data)
+        let path = {
+            let vfs = self.vfs.read();
+            let p = vfs.paths().next().cloned();
+            p
+        };
+
+        let text = if let Some(path) = path {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        let parse_result = parse(&text);
+        let resolved = handle_code_lens_resolve(lens, &parse_result);
+
+        serde_json::to_value(resolved).map_err(|e| e.to_string())
     }
 
     /// Handle the textDocument/documentColor request.
@@ -1094,8 +1261,17 @@ impl MainLoopState {
                     self.on_did_close(params);
                 }
             }
+            DidChangeWatchedFiles::METHOD => {
+                if let Ok(params) =
+                    serde_json::from_value::<lsp_types::DidChangeWatchedFilesParams>(notif.params)
+                {
+                    self.on_did_change_watched_files(params);
+                }
+            }
             "initialized" => {
                 tracing::info!("Client initialized");
+                // Register for file watching after initialization
+                self.register_file_watchers();
             }
             "exit" => {
                 tracing::info!("Exit notification received");
@@ -1165,6 +1341,84 @@ impl MainLoopState {
         // Clear diagnostics
         self.diagnostics.remove(&uri);
         self.send_diagnostics(&uri, vec![]);
+    }
+
+    /// Handle workspace/didChangeWatchedFiles notification.
+    fn on_did_change_watched_files(&mut self, params: lsp_types::DidChangeWatchedFilesParams) {
+        tracing::info!("Watched files changed: {} files", params.changes.len());
+
+        for change in params.changes {
+            tracing::debug!("File {:?}: {:?}", change.uri.as_str(), change.typ);
+
+            // If a .beancount file changed externally, re-validate open documents
+            // that might include this file
+            if change.uri.as_str().ends_with(".beancount") {
+                self.revalidate_open_documents();
+                break; // Only need to revalidate once
+            }
+        }
+    }
+
+    /// Re-validate all open documents (e.g., after an included file changes).
+    fn revalidate_open_documents(&mut self) {
+        let paths: Vec<_> = self.vfs.read().paths().cloned().collect();
+
+        // Collect contents first to avoid borrow issues
+        let documents: Vec<_> = paths
+            .into_iter()
+            .filter_map(|path| {
+                let content = self.vfs.read().get_content(&path)?;
+                let uri_str = format!("file://{}", path.display());
+                let uri = uri_str.parse::<Uri>().ok()?;
+                Some((uri, content))
+            })
+            .collect();
+
+        // Now publish diagnostics
+        for (uri, content) in documents {
+            tracing::debug!("Revalidating: {}", uri.as_str());
+            self.publish_diagnostics(&uri, &content);
+        }
+    }
+
+    /// Register file watchers with the client.
+    fn register_file_watchers(&self) {
+        // Create a registration request for file watching
+        let watchers = vec![
+            lsp_types::FileSystemWatcher {
+                glob_pattern: lsp_types::GlobPattern::String("**/*.beancount".to_string()),
+                kind: Some(lsp_types::WatchKind::all()),
+            },
+            lsp_types::FileSystemWatcher {
+                glob_pattern: lsp_types::GlobPattern::String("**/*.bean".to_string()),
+                kind: Some(lsp_types::WatchKind::all()),
+            },
+        ];
+
+        let registration = lsp_types::Registration {
+            id: "file-watcher".to_string(),
+            method: "workspace/didChangeWatchedFiles".to_string(),
+            register_options: Some(
+                serde_json::to_value(lsp_types::DidChangeWatchedFilesRegistrationOptions {
+                    watchers,
+                })
+                .unwrap_or_default(),
+            ),
+        };
+
+        let params = lsp_types::RegistrationParams {
+            registrations: vec![registration],
+        };
+
+        // Send the registration request
+        let request = lsp_server::Request::new(
+            lsp_server::RequestId::from("register-file-watchers".to_string()),
+            "client/registerCapability".to_string(),
+            params,
+        );
+
+        self.send(lsp_server::Message::Request(request));
+        tracing::info!("Registered file watchers for *.beancount and *.bean files");
     }
 
     /// Parse document and publish diagnostics.

@@ -73,7 +73,16 @@ pub fn start_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         hover_provider: Some(lsp_types::HoverProviderCapability::Simple(true)),
         document_symbol_provider: Some(lsp_types::OneOf::Left(true)),
         semantic_tokens_provider: Some(get_semantic_tokens_capabilities()),
-        code_action_provider: Some(lsp_types::CodeActionProviderCapability::Simple(true)),
+        code_action_provider: Some(lsp_types::CodeActionProviderCapability::Options(
+            lsp_types::CodeActionOptions {
+                code_action_kinds: Some(vec![
+                    lsp_types::CodeActionKind::QUICKFIX,
+                    lsp_types::CodeActionKind::REFACTOR,
+                ]),
+                resolve_provider: Some(true), // Enable resolve for lazy-loading edits
+                work_done_progress_options: Default::default(),
+            },
+        )),
         workspace_symbol_provider: Some(lsp_types::OneOf::Left(true)),
         rename_provider: Some(lsp_types::OneOf::Right(lsp_types::RenameOptions {
             prepare_provider: Some(true),
@@ -82,10 +91,15 @@ pub fn start_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
         document_range_formatting_provider: Some(lsp_types::OneOf::Left(true)),
         document_link_provider: Some(lsp_types::DocumentLinkOptions {
-            resolve_provider: Some(false),
+            resolve_provider: Some(true), // Enable resolve to verify file existence
             work_done_progress_options: Default::default(),
         }),
-        inlay_hint_provider: Some(lsp_types::OneOf::Left(true)),
+        inlay_hint_provider: Some(lsp_types::OneOf::Right(
+            lsp_types::InlayHintServerCapabilities::Options(lsp_types::InlayHintOptions {
+                resolve_provider: Some(true), // Enable resolve for rich tooltips
+                work_done_progress_options: Default::default(),
+            }),
+        )),
         selection_range_provider: Some(lsp_types::SelectionRangeProviderCapability::Simple(true)),
         folding_range_provider: Some(lsp_types::FoldingRangeProviderCapability::Simple(true)),
         document_highlight_provider: Some(lsp_types::OneOf::Left(true)),
@@ -102,7 +116,7 @@ pub fn start_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ),
         }),
         code_lens_provider: Some(lsp_types::CodeLensOptions {
-            resolve_provider: Some(false),
+            resolve_provider: Some(true), // Enable resolve for lazy-loading balance verification
         }),
         color_provider: Some(lsp_types::ColorProviderCapability::Simple(true)),
         declaration_provider: Some(lsp_types::DeclarationCapability::Simple(true)),
@@ -125,6 +139,14 @@ pub fn start_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         experimental: Some(serde_json::json!({
             "typeHierarchyProvider": true
         })),
+        // Workspace capabilities
+        workspace: Some(lsp_types::WorkspaceServerCapabilities {
+            workspace_folders: Some(lsp_types::WorkspaceFoldersServerCapabilities {
+                supported: Some(true),
+                change_notifications: Some(lsp_types::OneOf::Left(true)),
+            }),
+            file_operations: None, // File operations (create/rename/delete) not needed for Beancount
+        }),
         ..Default::default()
     };
 
