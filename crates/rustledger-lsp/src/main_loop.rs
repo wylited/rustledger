@@ -15,6 +15,7 @@ use crate::handlers::formatting::handle_formatting;
 use crate::handlers::hover::handle_hover;
 use crate::handlers::inlay_hints::handle_inlay_hints;
 use crate::handlers::range_formatting::handle_range_formatting;
+use crate::handlers::references::handle_references;
 use crate::handlers::rename::{handle_prepare_rename, handle_rename};
 use crate::handlers::selection_range::handle_selection_range;
 use crate::handlers::semantic_tokens::handle_semantic_tokens;
@@ -30,14 +31,14 @@ use lsp_types::notification::{
 use lsp_types::request::{
     CodeActionRequest, Completion, DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest,
     Formatting, GotoDefinition, HoverRequest, Initialize, InlayHintRequest, PrepareRenameRequest,
-    RangeFormatting, Rename, Request, SelectionRangeRequest, SemanticTokensFullRequest, Shutdown,
-    WorkspaceSymbolRequest,
+    RangeFormatting, References, Rename, Request, SelectionRangeRequest, SemanticTokensFullRequest,
+    Shutdown, WorkspaceSymbolRequest,
 };
 use lsp_types::{
     CodeActionParams, CompletionParams, DiagnosticOptions, DiagnosticServerCapabilities,
     DocumentFormattingParams, DocumentLinkParams, DocumentRangeFormattingParams,
     DocumentSymbolParams, FoldingRangeParams, GotoDefinitionParams, HoverParams, InitializeParams,
-    InitializeResult, InlayHintParams, PublishDiagnosticsParams, RenameParams,
+    InitializeResult, InlayHintParams, PublishDiagnosticsParams, ReferenceParams, RenameParams,
     SelectionRangeParams, SemanticTokensParams, ServerCapabilities, ServerInfo,
     TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
     WorkspaceSymbolParams,
@@ -152,6 +153,7 @@ impl MainLoopState {
             }
             Completion::METHOD => self.handle_completion_request(req),
             GotoDefinition::METHOD => self.handle_goto_definition_request(req),
+            References::METHOD => self.handle_references_request(req),
             HoverRequest::METHOD => self.handle_hover_request(req),
             DocumentSymbolRequest::METHOD => self.handle_document_symbols_request(req),
             SemanticTokensFullRequest::METHOD => self.handle_semantic_tokens_request(req),
@@ -254,6 +256,32 @@ impl MainLoopState {
 
         // Handle go-to-definition
         let response = handle_goto_definition(&params, &text, &parse_result, uri);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/references request.
+    fn handle_references_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: ReferenceParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document_position.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle references
+        let response = handle_references(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
     }
