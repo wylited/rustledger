@@ -241,7 +241,8 @@ pub enum Token<'src> {
     DeepIndent(usize),
 
     /// Error token for unrecognized input.
-    Error,
+    /// Contains the invalid source text for better error messages.
+    Error(&'src str),
 }
 
 impl Token<'_> {
@@ -334,7 +335,7 @@ impl fmt::Display for Token<'_> {
             Self::MetaKey(s) => write!(f, "{s}"),
             Self::Indent(n) => write!(f, "<indent:{n}>"),
             Self::DeepIndent(n) => write!(f, "<deep-indent:{n}>"),
-            Self::Error => write!(f, "<error>"),
+            Self::Error(s) => write!(f, "{s}"),
         }
     }
 }
@@ -403,9 +404,10 @@ pub fn tokenize(source: &str) -> Vec<(Token<'_>, Span)> {
                 tokens.push((token, span.into()));
             }
             Err(()) => {
-                // Lexer error - produce an Error token
+                // Lexer error - produce an Error token with the invalid source text
                 at_line_start = false;
-                tokens.push((Token::Error, span.into()));
+                let invalid_text = &source[span.clone()];
+                tokens.push((Token::Error(invalid_text), span.into()));
             }
         }
     }

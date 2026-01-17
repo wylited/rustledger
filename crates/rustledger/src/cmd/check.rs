@@ -133,8 +133,8 @@ fn run(args: &Args) -> Result<ExitCode> {
             .load(file)
             .with_context(|| format!("failed to load {}", file.display()))?;
 
-        // Save to cache (unless --no-cache)
-        if !args.no_cache {
+        // Save to cache (unless --no-cache or there are parse errors)
+        if !args.no_cache && result.errors.is_empty() {
             // Collect all loaded file paths for cache (as strings for serialization)
             let files: Vec<String> = result
                 .source_map

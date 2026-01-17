@@ -55,7 +55,7 @@ pub fn report_parse_errors<W: Write>(
         let color = colors.next();
         let (start, end) = error.span();
 
-        Report::build(ReportKind::Error, &path_str, start)
+        let mut report = Report::build(ReportKind::Error, &path_str, start)
             .with_code(format!("P{:04}", error.kind_code()))
             .with_message(error.message())
             .with_label(
@@ -63,7 +63,14 @@ pub fn report_parse_errors<W: Write>(
                     .with_message(error.label())
                     .with_color(color),
             )
-            .with_config(Config::default().with_compact(false))
+            .with_config(Config::default().with_compact(false));
+
+        // Add hint if present
+        if let Some(hint) = &error.hint {
+            report = report.with_help(hint);
+        }
+
+        report
             .finish()
             .write((&path_str, Source::from(source)), &mut *writer)?;
     }
