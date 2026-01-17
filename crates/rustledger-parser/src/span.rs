@@ -132,3 +132,122 @@ impl<T: fmt::Display> fmt::Display for Spanned<T> {
         write!(f, "{}", self.value)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_span_new() {
+        let span = Span::new(10, 20);
+        assert_eq!(span.start, 10);
+        assert_eq!(span.end, 20);
+    }
+
+    #[test]
+    fn test_span_from_range() {
+        let span = Span::from_range(5..15);
+        assert_eq!(span.start, 5);
+        assert_eq!(span.end, 15);
+    }
+
+    #[test]
+    fn test_span_len() {
+        let span = Span::new(10, 25);
+        assert_eq!(span.len(), 15);
+    }
+
+    #[test]
+    fn test_span_is_empty() {
+        let empty = Span::new(5, 5);
+        let non_empty = Span::new(5, 10);
+        assert!(empty.is_empty());
+        assert!(!non_empty.is_empty());
+    }
+
+    #[test]
+    fn test_span_merge() {
+        let a = Span::new(10, 20);
+        let b = Span::new(15, 30);
+        let merged = a.merge(&b);
+        assert_eq!(merged.start, 10);
+        assert_eq!(merged.end, 30);
+
+        // Test with non-overlapping spans
+        let c = Span::new(5, 8);
+        let merged2 = a.merge(&c);
+        assert_eq!(merged2.start, 5);
+        assert_eq!(merged2.end, 20);
+    }
+
+    #[test]
+    fn test_span_text() {
+        let source = "hello world";
+        let span = Span::new(0, 5);
+        assert_eq!(span.text(source), "hello");
+
+        let span2 = Span::new(6, 11);
+        assert_eq!(span2.text(source), "world");
+    }
+
+    #[test]
+    fn test_span_into_range() {
+        let span = Span::new(3, 7);
+        let range: Range<usize> = span.into_range();
+        assert_eq!(range, 3..7);
+    }
+
+    #[test]
+    fn test_span_from_impl() {
+        let span: Span = (5..10).into();
+        assert_eq!(span.start, 5);
+        assert_eq!(span.end, 10);
+    }
+
+    #[test]
+    fn test_range_from_span() {
+        let span = Span::new(2, 8);
+        let range: Range<usize> = span.into();
+        assert_eq!(range, 2..8);
+    }
+
+    #[test]
+    fn test_span_display() {
+        let span = Span::new(10, 20);
+        assert_eq!(format!("{span}"), "10..20");
+    }
+
+    #[test]
+    fn test_spanned_new() {
+        let spanned = Spanned::new("value", Span::new(0, 5));
+        assert_eq!(spanned.value, "value");
+        assert_eq!(spanned.span, Span::new(0, 5));
+    }
+
+    #[test]
+    fn test_spanned_map() {
+        let spanned = Spanned::new(5, Span::new(0, 1));
+        let mapped = spanned.map(|x| x * 2);
+        assert_eq!(mapped.value, 10);
+        assert_eq!(mapped.span, Span::new(0, 1));
+    }
+
+    #[test]
+    fn test_spanned_inner() {
+        let spanned = Spanned::new("test", Span::new(0, 4));
+        assert_eq!(spanned.inner(), &"test");
+    }
+
+    #[test]
+    fn test_spanned_into_inner() {
+        let spanned = Spanned::new(String::from("owned"), Span::new(0, 5));
+        let inner = spanned.into_inner();
+        assert_eq!(inner, "owned");
+    }
+
+    #[test]
+    fn test_spanned_display() {
+        let spanned = Spanned::new(42, Span::new(0, 2));
+        assert_eq!(format!("{spanned}"), "42");
+    }
+}

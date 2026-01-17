@@ -32,6 +32,51 @@ use crate::span::{Span, Spanned};
 use crate::ParseResult;
 
 // ============================================================================
+// Constants for Error Detection
+// ============================================================================
+
+/// Standard Beancount account type prefixes with their lowercase and capitalized forms.
+/// Used for detecting capitalization errors and validating account names.
+const ACCOUNT_TYPES: &[(&str, &str)] = &[
+    ("assets", "Assets"),
+    ("liabilities", "Liabilities"),
+    ("equity", "Equity"),
+    ("income", "Income"),
+    ("expenses", "Expenses"),
+    ("revenue", "Revenue"),
+];
+
+/// Common directive typos mapped to their correct spellings.
+/// Used to provide helpful "did you mean?" suggestions.
+const DIRECTIVE_TYPOS: &[(&str, &str)] = &[
+    ("opne", "open"),
+    ("ope", "open"),
+    ("opn", "open"),
+    ("clsoe", "close"),
+    ("colse", "close"),
+    ("closee", "close"),
+    ("balacne", "balance"),
+    ("blanace", "balance"),
+    ("balnace", "balance"),
+    ("balanec", "balance"),
+    ("pda", "pad"),
+    ("nte", "note"),
+    ("ntoe", "note"),
+    ("documnet", "document"),
+    ("docuemnt", "document"),
+    ("evnet", "event"),
+    ("evet", "event"),
+    ("pricee", "price"),
+    ("pirce", "price"),
+    ("commoditiy", "commodity"),
+    ("commdoity", "commodity"),
+    ("qurey", "query"),
+    ("qeury", "query"),
+    ("custmo", "custom"),
+    ("cusotm", "custom"),
+];
+
+// ============================================================================
 // Token Input Types
 // ============================================================================
 
@@ -107,22 +152,43 @@ fn tok_date<'src>(
                 if parts.len() == 3 {
                     let y: i32 = parts[0]
                         .parse()
-                        .map_err(|_| Rich::custom(span, "invalid year"))?;
+                        .map_err(|_| Rich::custom(span, format!("invalid year in date '{s}'")))?;
                     let m: u32 = parts[1]
                         .parse()
-                        .map_err(|_| Rich::custom(span, "invalid month"))?;
+                        .map_err(|_| Rich::custom(span, format!("invalid month in date '{s}'")))?;
                     let d: u32 = parts[2]
                         .parse()
-                        .map_err(|_| Rich::custom(span, "invalid day"))?;
-                    NaiveDate::from_ymd_opt(y, m, d)
-                        .ok_or_else(|| Rich::custom(span, "invalid date"))
+                        .map_err(|_| Rich::custom(span, format!("invalid day in date '{s}'")))?;
+
+                    // Validate ranges and provide specific error messages
+                    if !(1..=12).contains(&m) {
+                        return Err(Rich::custom(
+                            span,
+                            format!("invalid date '{s}': month must be 1-12 (got {m})"),
+                        ));
+                    }
+                    if !(1..=31).contains(&d) {
+                        return Err(Rich::custom(
+                            span,
+                            format!("invalid date '{s}': day must be 1-31 (got {d})"),
+                        ));
+                    }
+
+                    NaiveDate::from_ymd_opt(y, m, d).ok_or_else(|| {
+                        // This catches cases like Feb 30, Apr 31, etc.
+                        Rich::custom(
+                            span,
+                            format!("invalid date '{s}': day {d} is invalid for month {m}"),
+                        )
+                    })
                 } else {
-                    Err(Rich::custom(span, "invalid date format"))
+                    Err(Rich::custom(span, format!("invalid date format '{s}'")))
                 }
             } else {
                 Err(Rich::custom(span, "expected date"))
             }
         })
+        .labelled("date")
 }
 
 /// Match a number token and extract the Decimal.
@@ -139,6 +205,7 @@ fn tok_number<'src>(
                 Err(Rich::custom(span, "expected number"))
             }
         })
+        .labelled("number")
 }
 
 /// Match a string token and extract the content (without quotes).
@@ -177,6 +244,7 @@ fn tok_string<'src>(
                 String::new()
             }
         })
+        .labelled("string")
 }
 
 /// Match an account token and extract the string.
@@ -191,6 +259,7 @@ fn tok_account<'src>(
                 ""
             }
         })
+        .labelled("account name")
 }
 
 /// Match a currency token and extract the string.
@@ -205,6 +274,7 @@ fn tok_currency<'src>(
                 ""
             }
         })
+        .labelled("currency")
 }
 
 /// Match a tag token and extract the string (without # prefix).
@@ -220,6 +290,7 @@ fn tok_tag<'src>(
                 ""
             }
         })
+        .labelled("tag")
 }
 
 /// Match a link token and extract the string (without ^ prefix).
@@ -235,6 +306,7 @@ fn tok_link<'src>(
                 ""
             }
         })
+        .labelled("link")
 }
 
 /// Match a metadata key token and extract the key (without colon).
@@ -1370,6 +1442,7 @@ fn tok_entry<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem
         tok_emacs_directive().to(ParsedItem::Comment),
         tok_org_header_line().to(ParsedItem::Comment),
     ))
+    .labelled("directive")
 }
 
 /// Skip tokens until we reach a newline (for error recovery).
@@ -1465,16 +1538,301 @@ pub fn parse(source: &str) -> ParseResult {
             let start_idx = e.span().start;
             let end_idx = e.span().end;
             let span = index_to_byte_span(&tokens, start_idx, end_idx);
-            let kind = if e.found().is_none() {
-                ParseErrorKind::UnexpectedEof
+
+            // Check for custom error message first (from Rich::custom())
+            let reason = e.reason();
+            if let chumsky::error::RichReason::Custom(msg) = reason {
+                return ParseError::new(ParseErrorKind::SyntaxError(msg.clone()), span);
+            }
+
+            // Get the token at the error position for analysis
+            let found_token = e.found().map(|t| &t.token).or_else(|| {
+                if start_idx < tokens.len() {
+                    Some(&tokens[start_idx].token)
+                } else {
+                    None
+                }
+            });
+
+            // Format what was found for display
+            let found_str =
+                found_token.map_or_else(|| "end of input".to_string(), |t| format!("'{t}'"));
+
+            // Collect expected patterns into readable strings
+            let expected: Vec<String> = e
+                .expected()
+                .filter_map(|exp| {
+                    use chumsky::error::RichPattern;
+                    match exp {
+                        RichPattern::Token(t) => Some(format!("'{}'", t.token)),
+                        RichPattern::Label(label) => Some(label.to_string()),
+                        RichPattern::Identifier(id) => Some(format!("'{id}'")),
+                        RichPattern::EndOfInput => Some("end of input".to_string()),
+                        RichPattern::Any => Some("something".to_string()),
+                        RichPattern::SomethingElse => None,
+                    }
+                })
+                .collect();
+
+            // Check for newline after directive keyword (missing required element)
+            // This provides context-aware errors like "expected account name after 'open'"
+            if matches!(found_token, Some(Token::Newline)) && start_idx > 0 {
+                let prev_token = &tokens[start_idx - 1].token;
+
+                // Directives expecting account names
+                let account_directive = match prev_token {
+                    Token::Open => Some(("open", "e.g., '2024-01-01 open Assets:Bank'")),
+                    Token::Close => Some(("close", "e.g., '2024-01-01 close Assets:Bank'")),
+                    Token::Balance => {
+                        Some(("balance", "e.g., '2024-01-01 balance Assets:Bank 100 USD'"))
+                    }
+                    Token::Pad => {
+                        Some(("pad", "e.g., '2024-01-01 pad Assets:Bank Equity:Opening'"))
+                    }
+                    Token::Note => Some(("note", "e.g., '2024-01-01 note Assets:Bank \"memo\"'")),
+                    Token::Document => Some((
+                        "document",
+                        "e.g., '2024-01-01 document Assets:Bank \"/path/to/file\"'",
+                    )),
+                    _ => None,
+                };
+
+                if let Some((directive, hint)) = account_directive {
+                    return ParseError::new(ParseErrorKind::MissingAccount, span)
+                        .with_context(format!("after '{directive}' keyword"))
+                        .with_hint(hint);
+                }
+
+                // Directives expecting currency
+                let currency_directive = match prev_token {
+                    Token::Price => Some(("price", "e.g., '2024-01-01 price USD 1.10 EUR'")),
+                    Token::Commodity => Some(("commodity", "e.g., '2024-01-01 commodity USD'")),
+                    _ => None,
+                };
+
+                if let Some((directive, hint)) = currency_directive {
+                    return ParseError::new(ParseErrorKind::MissingCurrency, span)
+                        .with_context(format!("after '{directive}' keyword"))
+                        .with_hint(hint);
+                }
+
+                // Directives expecting strings
+                let string_directive = match prev_token {
+                    Token::Event => Some((
+                        "event",
+                        "event type string",
+                        "e.g., '2024-01-01 event \"location\" \"value\"'",
+                    )),
+                    Token::Query => Some((
+                        "query",
+                        "query name string",
+                        "e.g., '2024-01-01 query \"name\" \"SELECT ...\"'",
+                    )),
+                    Token::Custom => Some((
+                        "custom",
+                        "custom type string",
+                        "e.g., '2024-01-01 custom \"budget\" ...'",
+                    )),
+                    _ => None,
+                };
+
+                if let Some((directive, expected, hint)) = string_directive {
+                    return ParseError::new(ParseErrorKind::Expected(expected.to_string()), span)
+                        .with_context(format!("after '{directive}' keyword"))
+                        .with_hint(hint);
+                }
+            }
+
+            // Check for invalid date tokens (e.g., 2024-13-45)
+            if let Some(Token::Date(date_str)) = found_token {
+                // Try to parse the date to see if it's invalid
+                let parts: Vec<&str> = date_str.split(['-', '/']).collect();
+                if parts.len() == 3 {
+                    if let (Ok(y), Ok(m), Ok(d)) = (
+                        parts[0].parse::<i32>(),
+                        parts[1].parse::<u32>(),
+                        parts[2].parse::<u32>(),
+                    ) {
+                        // Check for invalid month
+                        if !(1..=12).contains(&m) {
+                            return ParseError::new(
+                                ParseErrorKind::InvalidDateValue(format!(
+                                    "month must be 1-12 (got {m})"
+                                )),
+                                span,
+                            )
+                            .with_hint("dates use YYYY-MM-DD format");
+                        }
+                        // Check for invalid day
+                        if !(1..=31).contains(&d) {
+                            return ParseError::new(
+                                ParseErrorKind::InvalidDateValue(format!(
+                                    "day must be 1-31 (got {d})"
+                                )),
+                                span,
+                            )
+                            .with_hint("dates use YYYY-MM-DD format");
+                        }
+                        // Check if the date is actually valid (e.g., Feb 30)
+                        if chrono::NaiveDate::from_ymd_opt(y, m, d).is_none() {
+                            return ParseError::new(
+                                ParseErrorKind::InvalidDateValue(format!(
+                                    "day {d} is invalid for month {m}"
+                                )),
+                                span,
+                            )
+                            .with_hint("dates use YYYY-MM-DD format");
+                        }
+                    }
+                }
+            }
+
+            // Check for unclosed string literal
+            // This is detected when an error token starts with " but doesn't end with "
+            if let Some(Token::Error(text)) = found_token {
+                if text.starts_with('"') && !text.ends_with('"') {
+                    return ParseError::new(ParseErrorKind::UnclosedString, span)
+                        .with_hint("add closing '\"' to complete the string");
+                }
+            }
+
+            // Check for lowercase account type (e.g., "assets:" instead of "Assets:")
+            // This handles cases like "assets:Bank" where the first letter should be capitalized
+            {
+                // Extract the actual text (remove surrounding quotes)
+                let text = found_str.trim_start_matches('\'').trim_end_matches('\'');
+
+                // Only check if the first character is actually lowercase
+                let first_char = text.chars().next();
+                if first_char.is_some_and(|c| c.is_ascii_lowercase()) {
+                    let text_lower = text.to_lowercase();
+                    for (lowercase, capitalized) in ACCOUNT_TYPES {
+                        if text_lower.starts_with(lowercase) {
+                            let rest = if text.len() > lowercase.len() {
+                                &text[lowercase.len()..]
+                            } else {
+                                ""
+                            };
+                            return ParseError::new(
+                                ParseErrorKind::InvalidAccount(text.to_string()),
+                                span,
+                            )
+                            .with_context("account type must be capitalized")
+                            .with_hint(format!("try '{capitalized}{rest}' instead of '{text}'"));
+                        }
+                    }
+                }
+            }
+
+            // Check if this looks like an invalid account (capitalized word without colon)
+            // This is a common mistake: writing "Assets" instead of "Assets:Bank"
+            if let Some(Token::Error(text)) = found_token {
+                let first_char = text.chars().next();
+                let is_capitalized = first_char.is_some_and(|c| c.is_ascii_uppercase());
+                let has_colon = text.contains(':');
+                let is_alphanumeric = text.chars().all(char::is_alphanumeric);
+
+                // Check if it starts with a known account type prefix
+                let looks_like_account = ACCOUNT_TYPES
+                    .iter()
+                    .any(|(_, capitalized)| text.starts_with(capitalized));
+
+                if is_capitalized && !has_colon && is_alphanumeric && looks_like_account {
+                    return ParseError::new(
+                        ParseErrorKind::InvalidAccountFormat((*text).to_string()),
+                        span,
+                    )
+                    .with_hint(format!(
+                        "account names must contain ':', e.g., '{text}:Checking'"
+                    ));
+                }
+            }
+
+            // Check for MM-DD-YYYY date format (common mistake)
+            // This is detected when we see a two-digit number at the start that looks like a month
+            if span.start == 0
+                || (start_idx > 0
+                    && matches!(
+                        tokens.get(start_idx - 1).map(|t| &t.token),
+                        Some(Token::Newline)
+                    ))
+            {
+                // We're at the start of a line - check if this looks like MM-DD-YYYY
+                if let Some(Token::Number(num_str)) = found_token {
+                    if let Ok(num) = num_str.parse::<u32>() {
+                        if (1..=12).contains(&num) && num_str.len() <= 2 {
+                            // Looks like a month number - could be MM-DD-YYYY format
+                            return ParseError::new(
+                                ParseErrorKind::InvalidDate(format!("{num_str}-...")),
+                                span,
+                            )
+                            .with_context("wrong date format")
+                            .with_hint(
+                                "use YYYY-MM-DD format (e.g., '2024-01-15' not '01-15-2024')",
+                            );
+                        }
+                    }
+                }
+                // Also check error tokens that look like two-digit numbers
+                let text = found_str.trim_matches('\'');
+                if text.len() == 2 {
+                    if let Ok(num) = text.parse::<u32>() {
+                        if (1..=12).contains(&num) {
+                            return ParseError::new(
+                                ParseErrorKind::InvalidDate(format!("{text}-...")),
+                                span,
+                            )
+                            .with_context("wrong date format")
+                            .with_hint(
+                                "use YYYY-MM-DD format (e.g., '2024-01-15' not '01-15-2024')",
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Check for common directive typos after a date
+            // This helps users who type "opne" instead of "open", etc.
+            if start_idx > 0 {
+                let prev_token = tokens.get(start_idx - 1).map(|t| &t.token);
+                if matches!(prev_token, Some(Token::Date(_))) {
+                    let text = found_str.trim_matches('\'').to_lowercase();
+
+                    for (typo, correct) in DIRECTIVE_TYPOS {
+                        if text == *typo {
+                            return ParseError::new(
+                                ParseErrorKind::SyntaxError(format!("unknown directive '{text}'")),
+                                span,
+                            )
+                            .with_hint(format!("did you mean '{correct}'?"));
+                        }
+                    }
+                }
+            }
+
+            // Build descriptive error message
+            let actually_found_something = found_token.is_some();
+            let kind = if expected.is_empty() {
+                if actually_found_something {
+                    ParseErrorKind::SyntaxError(format!("unexpected {found_str}"))
+                } else {
+                    ParseErrorKind::UnexpectedEof
+                }
+            } else if expected.len() == 1 {
+                ParseErrorKind::Expected(format!("expected {}, found {found_str}", expected[0]))
             } else {
-                // Format error manually since Rich doesn't impl Display for our token type
-                let found_str = e
-                    .found()
-                    .map(|t| format!("{}", t.token))
-                    .unwrap_or_default();
-                ParseErrorKind::SyntaxError(format!("unexpected token: {found_str}"))
+                // Deduplicate and limit the number of expected items shown
+                let mut unique: Vec<_> = expected;
+                unique.sort();
+                unique.dedup();
+                let display = if unique.len() > 5 {
+                    format!("{}, ...", unique[..5].join(", "))
+                } else {
+                    unique.join(", ")
+                };
+                ParseErrorKind::Expected(format!("expected one of [{display}], found {found_str}"))
             };
+
             ParseError::new(kind, span)
         })
         .collect();
