@@ -6,7 +6,7 @@ This document defines performance targets for rustledger.
 
 ### Primary Target
 
-**10x faster than Python beancount** for typical workloads.
+**10-30x faster than Python beancount** depending on file size (10x for 100K+ transactions, 30x for small files due to startup overhead).
 
 | Metric | Python Beancount | rustledger Target |
 |--------|------------------|---------------------|
