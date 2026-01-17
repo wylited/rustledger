@@ -54,16 +54,55 @@ The project is a Cargo workspace with 9 crates:
 - Use `# Errors` section to document error conditions
 - Use `# Panics` section if function can panic
 
-## Review Checklist
+## Pull Request Review Policy
 
-When reviewing PRs, consider:
+### Review Checklist
+
+When reviewing PRs, check each of these areas:
 
 1. **Correctness**: Does the code do what it claims?
-1. **Beancount Compatibility**: Does it match Python beancount behavior?
-1. **Error Handling**: Are errors handled gracefully with good messages?
-1. **Tests**: Are there sufficient tests for new functionality?
-1. **Performance**: Any obvious performance issues?
-1. **Security**: Any potential security concerns (especially in parser/loader)?
+2. **Beancount Compatibility**: Does it match Python beancount behavior?
+3. **Error Handling**: Are errors handled gracefully with good messages?
+4. **Tests**: Are there sufficient tests for new functionality?
+5. **Performance**: Any obvious performance issues?
+6. **Security**: Any potential security concerns (especially in parser/loader)?
+7. **Documentation**: Are public APIs documented?
+8. **Style**: Does it follow project conventions?
+
+### Review Standards by PR Type
+
+| PR Type | Focus Areas | Approval Threshold |
+|---------|-------------|-------------------|
+| Bug fix | Correctness, regression tests, no side effects | 1 approval |
+| Feature | All checklist items, especially tests and docs | 1 approval |
+| Parser changes | Beancount compatibility, fuzz testing, error messages | 1 approval + extra scrutiny |
+| Breaking change | Migration path, documentation, all areas | 2 approvals |
+| Security fix | Vulnerability addressed, no new issues introduced | 1 approval, expedited |
+
+### Review Process
+
+1. **Read the PR description** - Understand the intent
+2. **Check CI status** - All checks should pass
+3. **Review file changes** - Focus on logic, not just style
+4. **Run locally if needed** - For complex changes
+5. **Leave constructive feedback** - Suggest improvements, explain concerns
+6. **Approve or request changes** - Be clear about blockers vs suggestions
+
+### Common Review Comments
+
+- "Add a test for this edge case"
+- "This could panic on empty input - use `get()` instead of indexing"
+- "Consider using `&str` instead of `String` here"
+- "Does this match Python beancount behavior?"
+- "This allocation could be avoided with..."
+
+### Auto-merge Rules
+
+PRs can auto-merge after CI passes if:
+- Single approval obtained
+- No "request changes" reviews pending
+- PR is not marked as draft
+- No merge conflicts
 
 ## Security Considerations
 

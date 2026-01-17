@@ -7,6 +7,7 @@ use std::sync::Arc;
 /// The LSP server.
 pub struct Server {
     /// Virtual file system for document management.
+    #[allow(dead_code)] // WIP: will be used when LSP handlers are implemented
     vfs: Arc<RwLock<Vfs>>,
 }
 

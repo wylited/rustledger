@@ -152,6 +152,66 @@ On tag push, the release workflow automatically:
 - Run `cargo clippy` to check for lints
 - All code must pass CI checks
 
+## Pull Request Process
+
+### Creating a PR
+
+1. Create a feature branch from `main`
+2. Make your changes with clear, atomic commits
+3. Ensure all tests pass: `cargo test`
+4. Push and open a PR against `main`
+5. Fill out the PR template completely
+
+### Draft PRs
+
+Use draft PRs for:
+- Work in progress that needs early feedback
+- Large changes you want to discuss before finalizing
+- Experimental features
+
+Convert to "Ready for review" when complete.
+
+### Review Requirements
+
+| PR Type | Required Approvals | Auto-merge |
+|---------|-------------------|------------|
+| Bug fix | 1 | Yes, after CI passes |
+| Feature | 1 | No |
+| Breaking change | 2 | No |
+| Security fix | 1 | Yes, expedited |
+
+### Review SLA
+
+- **Initial review**: Within 48 hours
+- **Follow-up reviews**: Within 24 hours
+- **Urgent/security**: Same day
+
+If your PR hasn't been reviewed, feel free to ping in the PR comments.
+
+### What Reviewers Check
+
+1. **Correctness**: Does the code do what it claims?
+2. **Tests**: Are there sufficient tests for the changes?
+3. **Beancount compatibility**: Does it match Python beancount behavior?
+4. **Performance**: Any obvious performance regressions?
+5. **Security**: Any potential vulnerabilities (especially in parser/loader)?
+6. **Documentation**: Are public APIs documented?
+7. **Style**: Does it follow project conventions?
+
+### Merge Policy
+
+- All CI checks must pass
+- Required approvals must be obtained
+- PR branch should be up-to-date with `main`
+- Squash merge for single-purpose PRs
+- Merge commit for multi-commit PRs that should preserve history
+
+### After Merge
+
+- Delete the feature branch
+- Close related issues
+- Update documentation if needed
+
 ## Questions?
 
 Open an issue or discussion on GitHub.

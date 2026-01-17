@@ -11,6 +11,7 @@ static REVISION: AtomicU64 = AtomicU64::new(0);
 
 /// Bump the global revision counter.
 /// Called when the world state changes (e.g., document edit).
+#[allow(dead_code)] // WIP: will be used when main loop is implemented
 pub fn bump_revision() -> u64 {
     REVISION.fetch_add(1, Ordering::SeqCst) + 1
 }
