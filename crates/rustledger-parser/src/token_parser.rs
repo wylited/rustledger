@@ -32,6 +32,51 @@ use crate::span::{Span, Spanned};
 use crate::ParseResult;
 
 // ============================================================================
+// Constants for Error Detection
+// ============================================================================
+
+/// Standard Beancount account type prefixes with their lowercase and capitalized forms.
+/// Used for detecting capitalization errors and validating account names.
+const ACCOUNT_TYPES: &[(&str, &str)] = &[
+    ("assets", "Assets"),
+    ("liabilities", "Liabilities"),
+    ("equity", "Equity"),
+    ("income", "Income"),
+    ("expenses", "Expenses"),
+    ("revenue", "Revenue"),
+];
+
+/// Common directive typos mapped to their correct spellings.
+/// Used to provide helpful "did you mean?" suggestions.
+const DIRECTIVE_TYPOS: &[(&str, &str)] = &[
+    ("opne", "open"),
+    ("ope", "open"),
+    ("opn", "open"),
+    ("clsoe", "close"),
+    ("colse", "close"),
+    ("closee", "close"),
+    ("balacne", "balance"),
+    ("blanace", "balance"),
+    ("balnace", "balance"),
+    ("balanec", "balance"),
+    ("pda", "pad"),
+    ("nte", "note"),
+    ("ntoe", "note"),
+    ("documnet", "document"),
+    ("docuemnt", "document"),
+    ("evnet", "event"),
+    ("evet", "event"),
+    ("pricee", "price"),
+    ("pirce", "price"),
+    ("commoditiy", "commodity"),
+    ("commdoity", "commodity"),
+    ("qurey", "query"),
+    ("qeury", "query"),
+    ("custmo", "custom"),
+    ("cusotm", "custom"),
+];
+
+// ============================================================================
 // Token Input Types
 // ============================================================================
 
@@ -1654,15 +1699,6 @@ pub fn parse(source: &str) -> ParseResult {
             // Check for lowercase account type (e.g., "assets:" instead of "Assets:")
             // This handles cases like "assets:Bank" where the first letter should be capitalized
             {
-                let lowercase_types = [
-                    ("assets", "Assets"),
-                    ("liabilities", "Liabilities"),
-                    ("equity", "Equity"),
-                    ("income", "Income"),
-                    ("expenses", "Expenses"),
-                    ("revenue", "Revenue"),
-                ];
-
                 // Extract the actual text (remove surrounding quotes)
                 let text = found_str.trim_start_matches('\'').trim_end_matches('\'');
 
@@ -1670,7 +1706,7 @@ pub fn parse(source: &str) -> ParseResult {
                 let first_char = text.chars().next();
                 if first_char.is_some_and(|c| c.is_ascii_lowercase()) {
                     let text_lower = text.to_lowercase();
-                    for (lowercase, capitalized) in lowercase_types {
+                    for (lowercase, capitalized) in ACCOUNT_TYPES {
                         if text_lower.starts_with(lowercase) {
                             let rest = if text.len() > lowercase.len() {
                                 &text[lowercase.len()..]
@@ -1696,18 +1732,10 @@ pub fn parse(source: &str) -> ParseResult {
                 let has_colon = text.contains(':');
                 let is_alphanumeric = text.chars().all(char::is_alphanumeric);
 
-                // Common account type prefixes
-                let account_prefixes = [
-                    "Assets",
-                    "Liabilities",
-                    "Equity",
-                    "Income",
-                    "Expenses",
-                    "Revenue",
-                ];
-                let looks_like_account = account_prefixes
+                // Check if it starts with a known account type prefix
+                let looks_like_account = ACCOUNT_TYPES
                     .iter()
-                    .any(|prefix| text.starts_with(prefix));
+                    .any(|(_, capitalized)| text.starts_with(capitalized));
 
                 if is_capitalized && !has_colon && is_alphanumeric && looks_like_account {
                     return ParseError::new(
@@ -1769,36 +1797,9 @@ pub fn parse(source: &str) -> ParseResult {
                 let prev_token = tokens.get(start_idx - 1).map(|t| &t.token);
                 if matches!(prev_token, Some(Token::Date(_))) {
                     let text = found_str.trim_matches('\'').to_lowercase();
-                    let typo_suggestions = [
-                        ("opne", "open"),
-                        ("ope", "open"),
-                        ("opn", "open"),
-                        ("clsoe", "close"),
-                        ("colse", "close"),
-                        ("closee", "close"),
-                        ("balacne", "balance"),
-                        ("blanace", "balance"),
-                        ("balnace", "balance"),
-                        ("balanec", "balance"),
-                        ("pda", "pad"),
-                        ("nte", "note"),
-                        ("ntoe", "note"),
-                        ("documnet", "document"),
-                        ("docuemnt", "document"),
-                        ("evnet", "event"),
-                        ("evet", "event"),
-                        ("pricee", "price"),
-                        ("pirce", "price"),
-                        ("commoditiy", "commodity"),
-                        ("commdoity", "commodity"),
-                        ("qurey", "query"),
-                        ("qeury", "query"),
-                        ("custmo", "custom"),
-                        ("cusotm", "custom"),
-                    ];
 
-                    for (typo, correct) in typo_suggestions {
-                        if text == typo {
+                    for (typo, correct) in DIRECTIVE_TYPOS {
+                        if text == *typo {
                             return ParseError::new(
                                 ParseErrorKind::SyntaxError(format!("unknown directive '{text}'")),
                                 span,
