@@ -75,6 +75,13 @@ pub fn start_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             work_done_progress_options: Default::default(),
         })),
         document_formatting_provider: Some(lsp_types::OneOf::Left(true)),
+        document_range_formatting_provider: Some(lsp_types::OneOf::Left(true)),
+        document_link_provider: Some(lsp_types::DocumentLinkOptions {
+            resolve_provider: Some(false),
+            work_done_progress_options: Default::default(),
+        }),
+        inlay_hint_provider: Some(lsp_types::OneOf::Left(true)),
+        selection_range_provider: Some(lsp_types::SelectionRangeProviderCapability::Simple(true)),
         folding_range_provider: Some(lsp_types::FoldingRangeProviderCapability::Simple(true)),
         ..Default::default()
     };

@@ -9,10 +9,14 @@ use crate::handlers::code_actions::handle_code_actions;
 use crate::handlers::completion::handle_completion;
 use crate::handlers::definition::handle_goto_definition;
 use crate::handlers::diagnostics::parse_errors_to_diagnostics;
+use crate::handlers::document_links::handle_document_links;
 use crate::handlers::folding::handle_folding_ranges;
 use crate::handlers::formatting::handle_formatting;
 use crate::handlers::hover::handle_hover;
+use crate::handlers::inlay_hints::handle_inlay_hints;
+use crate::handlers::range_formatting::handle_range_formatting;
 use crate::handlers::rename::{handle_prepare_rename, handle_rename};
+use crate::handlers::selection_range::handle_selection_range;
 use crate::handlers::semantic_tokens::handle_semantic_tokens;
 use crate::handlers::symbols::handle_document_symbols;
 use crate::handlers::workspace_symbols::handle_workspace_symbols;
@@ -24,16 +28,19 @@ use lsp_types::notification::{
     PublishDiagnostics,
 };
 use lsp_types::request::{
-    CodeActionRequest, Completion, DocumentSymbolRequest, FoldingRangeRequest, Formatting,
-    GotoDefinition, HoverRequest, Initialize, PrepareRenameRequest, Rename, Request,
-    SemanticTokensFullRequest, Shutdown, WorkspaceSymbolRequest,
+    CodeActionRequest, Completion, DocumentLinkRequest, DocumentSymbolRequest, FoldingRangeRequest,
+    Formatting, GotoDefinition, HoverRequest, Initialize, InlayHintRequest, PrepareRenameRequest,
+    RangeFormatting, Rename, Request, SelectionRangeRequest, SemanticTokensFullRequest, Shutdown,
+    WorkspaceSymbolRequest,
 };
 use lsp_types::{
     CodeActionParams, CompletionParams, DiagnosticOptions, DiagnosticServerCapabilities,
-    DocumentFormattingParams, DocumentSymbolParams, FoldingRangeParams, GotoDefinitionParams,
-    HoverParams, InitializeParams, InitializeResult, PublishDiagnosticsParams, RenameParams,
-    SemanticTokensParams, ServerCapabilities, ServerInfo, TextDocumentPositionParams,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Uri, WorkspaceSymbolParams,
+    DocumentFormattingParams, DocumentLinkParams, DocumentRangeFormattingParams,
+    DocumentSymbolParams, FoldingRangeParams, GotoDefinitionParams, HoverParams, InitializeParams,
+    InitializeResult, InlayHintParams, PublishDiagnosticsParams, RenameParams,
+    SelectionRangeParams, SemanticTokensParams, ServerCapabilities, ServerInfo,
+    TextDocumentPositionParams, TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
+    WorkspaceSymbolParams,
 };
 use parking_lot::RwLock;
 use rustledger_parser::parse;
@@ -153,6 +160,10 @@ impl MainLoopState {
             PrepareRenameRequest::METHOD => self.handle_prepare_rename_request(req),
             Rename::METHOD => self.handle_rename_request(req),
             Formatting::METHOD => self.handle_formatting_request(req),
+            RangeFormatting::METHOD => self.handle_range_formatting_request(req),
+            DocumentLinkRequest::METHOD => self.handle_document_link_request(req),
+            InlayHintRequest::METHOD => self.handle_inlay_hint_request(req),
+            SelectionRangeRequest::METHOD => self.handle_selection_range_request(req),
             FoldingRangeRequest::METHOD => self.handle_folding_range_request(req),
             _ => {
                 tracing::warn!("Unhandled request: {}", req.method);
@@ -468,6 +479,110 @@ impl MainLoopState {
 
         // Handle folding ranges
         let response = handle_folding_ranges(&params, &text, &parse_result);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/rangeFormatting request.
+    fn handle_range_formatting_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: DocumentRangeFormattingParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle range formatting
+        let response = handle_range_formatting(&params, &text, &parse_result);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/documentLink request.
+    fn handle_document_link_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: DocumentLinkParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle document links
+        let response = handle_document_links(&params, &text, &parse_result);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/inlayHint request.
+    fn handle_inlay_hint_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: InlayHintParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle inlay hints
+        let response = handle_inlay_hints(&params, &text, &parse_result);
+
+        serde_json::to_value(response).map_err(|e| e.to_string())
+    }
+
+    /// Handle the textDocument/selectionRange request.
+    fn handle_selection_range_request(
+        &self,
+        req: lsp_server::Request,
+    ) -> Result<serde_json::Value, String> {
+        let params: SelectionRangeParams =
+            serde_json::from_value(req.params).map_err(|e| e.to_string())?;
+
+        let uri = &params.text_document.uri;
+
+        // Get document content from VFS
+        let text = if let Some(path) = uri_to_path(uri) {
+            self.vfs.read().get_content(&path).unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        // Parse the document
+        let parse_result = parse(&text);
+
+        // Handle selection range
+        let response = handle_selection_range(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
     }
