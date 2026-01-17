@@ -4,7 +4,7 @@ This document provides context for Claude Code when reviewing pull requests and 
 
 ## Project Overview
 
-rustledger is a pure Rust implementation of Beancount, the double-entry bookkeeping language. It provides a 10x faster alternative to Python beancount with full syntax compatibility.
+rustledger is a pure Rust implementation of Beancount, the double-entry bookkeeping language. It provides a 10-30x faster alternative to Python beancount with full syntax compatibility.
 
 ## Architecture
 

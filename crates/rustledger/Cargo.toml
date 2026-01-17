@@ -1,6 +1,6 @@
 [package]
 name = "rustledger"
-description = "Drop-in replacement for Beancount. Pure Rust, 10x faster."
+description = "Drop-in replacement for Beancount. Pure Rust, 10-30x faster."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -17,7 +17,7 @@ ExclusiveArch:  x86_64 aarch64
 
 %description
 rustledger is a fast, pure Rust implementation of Beancount, the double-entry
-bookkeeping language. It provides a 10x faster alternative to Python beancount
+bookkeeping language. It provides a 10-30x faster alternative to Python beancount
 with full syntax compatibility.
 
 %prep
