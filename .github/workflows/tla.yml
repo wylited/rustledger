@@ -37,7 +37,7 @@ jobs:
 
       - name: Cache TLA+ Tools
         id: cache-tla
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/tla2tools.jar
           key: tla-tools-${{ env.TLA_VERSION }}
