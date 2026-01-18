@@ -1,0 +1,45 @@
+[package]
+name = "rustledger-lsp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+readme = "README.md"
+description = "Language Server Protocol implementation for Beancount"
+keywords = ["beancount", "lsp", "language-server", "accounting"]
+categories = ["development-tools", "text-editors"]
+
+[dependencies]
+# LSP framework
+lsp-server.workspace = true
+lsp-types.workspace = true
+
+# Async runtime
+tokio.workspace = true
+
+# Document management
+ropey.workspace = true
+
+# Concurrency
+crossbeam-channel.workspace = true
+parking_lot.workspace = true
+
+# Our crates
+rustledger-parser.workspace = true
+rustledger-core.workspace = true
+
+# Utilities
+tracing.workspace = true
+tracing-subscriber.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+
+[dev-dependencies]
+tokio-test = "0.4"
+
+[[bin]]
+name = "rledger-lsp"
+path = "src/main.rs"

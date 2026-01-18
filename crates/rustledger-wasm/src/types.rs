@@ -346,3 +346,133 @@ pub struct CompletionResultJson {
     /// Current context for debugging.
     pub context: String,
 }
+
+// =============================================================================
+// LSP-like Types for Editor Integration
+// =============================================================================
+
+/// A completion item for Beancount source editing.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorCompletion {
+    /// The label to display in the completion list.
+    pub label: String,
+    /// The kind of completion item.
+    pub kind: CompletionKind,
+    /// A human-readable string with additional information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// The text to insert when this completion is selected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insert_text: Option<String>,
+}
+
+/// The kind of a completion item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CompletionKind {
+    /// A keyword (directive name).
+    Keyword,
+    /// An account name.
+    Account,
+    /// An account segment (partial account).
+    AccountSegment,
+    /// A currency/commodity.
+    Currency,
+    /// A payee name.
+    Payee,
+    /// A date value.
+    Date,
+    /// A text/string value.
+    Text,
+}
+
+/// Result of a completion request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorCompletionResult {
+    /// The completions.
+    pub completions: Vec<EditorCompletion>,
+    /// The detected context.
+    pub context: String,
+}
+
+/// Hover information for a symbol.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorHoverInfo {
+    /// The hover content (Markdown formatted).
+    pub contents: String,
+    /// The range of the hovered symbol (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub range: Option<EditorRange>,
+}
+
+/// A range in the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorRange {
+    /// Start line (0-based).
+    pub start_line: u32,
+    /// Start character (0-based).
+    pub start_character: u32,
+    /// End line (0-based).
+    pub end_line: u32,
+    /// End character (0-based).
+    pub end_character: u32,
+}
+
+/// A location in the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorLocation {
+    /// Line number (0-based).
+    pub line: u32,
+    /// Character offset (0-based).
+    pub character: u32,
+}
+
+/// A document symbol for the outline view.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorDocumentSymbol {
+    /// The name of this symbol.
+    pub name: String,
+    /// More detail for this symbol.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// The kind of this symbol.
+    pub kind: SymbolKind,
+    /// The range enclosing this symbol.
+    pub range: EditorRange,
+    /// Children of this symbol (e.g., postings in a transaction).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub children: Option<Vec<Self>>,
+    /// Whether this symbol is deprecated (e.g., closed account).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deprecated: Option<bool>,
+}
+
+/// The kind of a symbol.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SymbolKind {
+    /// A transaction.
+    Transaction,
+    /// An account (open/close).
+    Account,
+    /// A balance assertion.
+    Balance,
+    /// A commodity/currency declaration.
+    Commodity,
+    /// A posting within a transaction.
+    Posting,
+    /// A pad directive.
+    Pad,
+    /// An event.
+    Event,
+    /// A note.
+    Note,
+    /// A document link.
+    Document,
+    /// A price.
+    Price,
+    /// A query definition.
+    Query,
+    /// A custom directive.
+    Custom,
+}

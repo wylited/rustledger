@@ -32,6 +32,7 @@ rustledger-plugin = { workspace = true, default-features = false, optional = tru
 wasm-bindgen.workspace = true
 serde-wasm-bindgen.workspace = true
 serde.workspace = true
+chrono.workspace = true
 
 # Better panic messages in WASM
 console_error_panic_hook = "0.1"
