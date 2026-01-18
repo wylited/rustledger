@@ -67,7 +67,7 @@ jobs:
           sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json
           sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
@@ -101,7 +101,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
