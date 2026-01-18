@@ -12,17 +12,27 @@ use lsp_types::{
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::LineIndex;
+
 /// Handle a document symbols request.
 pub fn handle_document_symbols(
     _params: &DocumentSymbolParams,
     source: &str,
     parse_result: &ParseResult,
 ) -> Option<DocumentSymbolResponse> {
+    // Build line index once for O(log n) lookups
+    let line_index = LineIndex::new(source);
+
     let symbols: Vec<DocumentSymbol> = parse_result
         .directives
         .iter()
         .filter_map(|spanned| {
-            directive_to_symbol(&spanned.value, spanned.span.start, spanned.span.end, source)
+            directive_to_symbol(
+                &spanned.value,
+                spanned.span.start,
+                spanned.span.end,
+                &line_index,
+            )
         })
         .collect();
 
@@ -39,10 +49,10 @@ fn directive_to_symbol(
     directive: &Directive,
     start_offset: usize,
     end_offset: usize,
-    source: &str,
+    line_index: &LineIndex,
 ) -> Option<DocumentSymbol> {
-    let (start_line, start_col) = byte_offset_to_position(source, start_offset);
-    let (end_line, end_col) = byte_offset_to_position(source, end_offset);
+    let (start_line, start_col) = line_index.offset_to_position(start_offset);
+    let (end_line, end_col) = line_index.offset_to_position(end_offset);
 
     let range = Range {
         start: Position::new(start_line, start_col),
@@ -251,26 +261,6 @@ fn directive_to_symbol(
             children: None,
         }),
     }
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

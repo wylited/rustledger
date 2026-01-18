@@ -8,16 +8,19 @@ use lsp_types::{Position, Range, SelectionRange, SelectionRangeParams};
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::LineIndex;
+
 /// Handle a selection range request.
 pub fn handle_selection_range(
     params: &SelectionRangeParams,
     source: &str,
     parse_result: &ParseResult,
 ) -> Option<Vec<SelectionRange>> {
+    let line_index = LineIndex::new(source);
     let mut results = Vec::new();
 
     for position in &params.positions {
-        if let Some(range) = compute_selection_range(source, parse_result, *position) {
+        if let Some(range) = compute_selection_range(source, parse_result, &line_index, *position) {
             results.push(range);
         } else {
             // Return a simple range at the position if we can't compute anything
@@ -38,6 +41,7 @@ pub fn handle_selection_range(
 fn compute_selection_range(
     source: &str,
     parse_result: &ParseResult,
+    line_index: &LineIndex,
     position: Position,
 ) -> Option<SelectionRange> {
     let lines: Vec<&str> = source.lines().collect();
@@ -51,8 +55,8 @@ fn compute_selection_range(
     let mut containing_directive: Option<(Range, &Directive)> = None;
 
     for spanned in &parse_result.directives {
-        let (start_line, start_col) = byte_offset_to_position(source, spanned.span.start);
-        let (end_line, end_col) = byte_offset_to_position(source, spanned.span.end);
+        let (start_line, start_col) = line_index.offset_to_position(spanned.span.start);
+        let (end_line, end_col) = line_index.offset_to_position(spanned.span.end);
 
         let dir_range = Range {
             start: Position::new(start_line, start_col),
@@ -238,26 +242,6 @@ fn find_account_range(line: &str, account: &str, line_num: u32) -> Option<Range>
 /// Check if a character is part of a word.
 fn is_word_char(c: char) -> bool {
     c.is_alphanumeric() || c == ':' || c == '-' || c == '_' || c == '.'
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

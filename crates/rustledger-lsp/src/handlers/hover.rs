@@ -5,9 +5,11 @@
 //! - Currencies: commodity directive info
 //! - Transactions: posting summary
 
-use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind, Position};
+use lsp_types::{Hover, HoverContents, HoverParams, MarkupContent, MarkupKind};
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
+
+use super::utils::{get_word_at_source_position, is_account_type, is_currency_like_simple};
 
 /// Handle a hover request.
 pub fn handle_hover(
@@ -18,7 +20,7 @@ pub fn handle_hover(
     let position = params.text_document_position_params.position;
 
     // Get the word at the cursor position
-    let word = get_word_at_position(source, position)?;
+    let word = get_word_at_source_position(source, position)?;
 
     tracing::debug!("Hover for word: {:?}", word);
 
@@ -36,7 +38,7 @@ pub fn handle_hover(
     }
 
     // Check if it's a currency
-    if is_currency_like(&word) {
+    if is_currency_like_simple(&word) {
         if let Some(info) = get_currency_info(&word, parse_result) {
             return Some(Hover {
                 contents: HoverContents::Markup(MarkupContent {
@@ -60,57 +62,6 @@ pub fn handle_hover(
     }
 
     None
-}
-
-/// Get the word at a given position in the source.
-fn get_word_at_position(source: &str, position: Position) -> Option<String> {
-    let line = source.lines().nth(position.line as usize)?;
-    let col = position.character as usize;
-
-    if col > line.len() {
-        return None;
-    }
-
-    let chars: Vec<char> = line.chars().collect();
-
-    // Find start of word
-    let mut start = col;
-    while start > 0 && is_word_char(chars.get(start - 1).copied()?) {
-        start -= 1;
-    }
-
-    // Find end of word
-    let mut end = col;
-    while end < chars.len() && is_word_char(chars[end]) {
-        end += 1;
-    }
-
-    if start == end {
-        return None;
-    }
-
-    Some(chars[start..end].iter().collect())
-}
-
-/// Check if a character is part of a word.
-fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == ':' || c == '_' || c == '-'
-}
-
-/// Check if a string looks like an account type.
-fn is_account_type(s: &str) -> bool {
-    matches!(
-        s,
-        "Assets" | "Liabilities" | "Equity" | "Income" | "Expenses"
-    )
-}
-
-/// Check if a string looks like a currency.
-fn is_currency_like(s: &str) -> bool {
-    s.len() >= 2
-        && s.len() <= 5
-        && s.chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 /// Get information about an account.
@@ -263,10 +214,5 @@ mod tests {
         assert!(get_directive_info("unknown").is_none());
     }
 
-    #[test]
-    fn test_is_currency_like() {
-        assert!(is_currency_like("USD"));
-        assert!(is_currency_like("BTC"));
-        assert!(!is_currency_like("usd"));
-    }
+    // Tests for shared utilities removed - they are tested in utils module
 }

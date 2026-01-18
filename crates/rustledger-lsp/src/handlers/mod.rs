@@ -3,6 +3,8 @@
 //! Each handler processes a specific LSP request type against
 //! an immutable world snapshot.
 
+pub mod utils;
+
 pub mod call_hierarchy;
 pub mod code_actions;
 pub mod code_lens;

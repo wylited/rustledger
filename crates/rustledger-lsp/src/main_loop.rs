@@ -73,7 +73,7 @@ use lsp_types::{
     WorkspaceSymbolParams,
 };
 use parking_lot::RwLock;
-use rustledger_parser::parse;
+use rustledger_parser::{parse, ParseResult};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -137,6 +137,11 @@ pub struct MainLoopState {
     pub shutdown_requested: bool,
 }
 
+/// Default empty parse result for missing documents.
+fn empty_parse_result() -> Arc<ParseResult> {
+    Arc::new(parse(""))
+}
+
 impl MainLoopState {
     /// Create a new main loop state.
     pub fn new(sender: Sender<lsp_server::Message>) -> Self {
@@ -146,6 +151,17 @@ impl MainLoopState {
             diagnostics: HashMap::new(),
             shutdown_requested: false,
         }
+    }
+
+    /// Get document text and cached parse result for a URI.
+    /// Uses cached parse result if available, avoiding re-parsing.
+    fn get_document_data(&self, uri: &Uri) -> (String, Arc<ParseResult>) {
+        if let Some(path) = uri_to_path(uri) {
+            if let Some((text, parse_result)) = self.vfs.write().get_document_data(&path) {
+                return (text, parse_result);
+            }
+        }
+        (String::new(), empty_parse_result())
     }
 
     /// Handle an incoming event.
@@ -270,18 +286,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle completion
         let response = handle_completion(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -296,18 +302,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle go-to-definition
         let response = handle_goto_definition(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -322,18 +318,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle references
         let response = handle_references(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -344,18 +330,8 @@ impl MainLoopState {
         let params: HoverParams = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle hover
         let response = handle_hover(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -370,18 +346,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle document symbols
         let response = handle_document_symbols(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -396,18 +362,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle semantic tokens
         let response = handle_semantic_tokens(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -422,18 +378,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle semantic tokens delta
         // Note: For a full implementation, we would store previous tokens by result_id
         // and pass them to handle_semantic_tokens_delta. For now, pass None to always
         // return full tokens as a delta.
@@ -451,18 +397,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle semantic tokens for range
         let response = handle_semantic_tokens_range(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -477,18 +413,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle code actions
         let response = handle_code_actions(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -511,17 +437,8 @@ impl MainLoopState {
             "file:///unknown".parse().unwrap()
         };
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(&uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
+        let (text, parse_result) = self.get_document_data(&uri);
 
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Resolve the code action
         let resolved = handle_code_action_resolve(action, &text, &parse_result, &uri);
 
         serde_json::to_value(resolved).map_err(|e| e.to_string())
@@ -535,17 +452,18 @@ impl MainLoopState {
         let params: WorkspaceSymbolParams =
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
-        // Collect all open documents
-        let vfs = self.vfs.read();
-        let mut documents = Vec::new();
-
-        for (path, content) in vfs.iter() {
-            let uri_str = format!("file://{}", path.display());
-            if let Ok(uri) = uri_str.parse() {
-                let parse_result = parse(&content);
-                documents.push((uri, content, parse_result));
-            }
-        }
+        // Collect all open documents with cached parse results
+        let mut vfs = self.vfs.write();
+        let documents: Vec<_> = vfs
+            .iter_with_parse()
+            .map(|(path, content, parse_result)| {
+                let uri_str = format!("file://{}", path.display());
+                let uri: Uri = uri_str
+                    .parse()
+                    .unwrap_or_else(|_| "file:///".parse().unwrap());
+                (uri, content, parse_result)
+            })
+            .collect();
 
         let response = handle_workspace_symbols(&params, &documents);
 
@@ -561,18 +479,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle prepare rename
         let response = handle_prepare_rename(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -583,18 +491,8 @@ impl MainLoopState {
         let params: RenameParams = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle rename
         let response = handle_rename(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -609,18 +507,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle formatting
         let response = handle_formatting(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -635,18 +523,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle folding ranges
         let response = handle_folding_ranges(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -661,18 +539,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle range formatting
         let response = handle_range_formatting(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -687,18 +555,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle document links
         let response = handle_document_links(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -725,18 +583,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle inlay hints
         let response = handle_inlay_hints(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -749,21 +597,17 @@ impl MainLoopState {
     ) -> Result<serde_json::Value, String> {
         let hint: InlayHint = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
-        // We need to get the document to resolve the hint
-        // Get path first, then release lock before getting content
-        let path = {
-            let vfs = self.vfs.read();
-            let p = vfs.paths().next().cloned();
-            p
-        };
-
-        let text = if let Some(path) = path {
-            self.vfs.read().get_content(&path).unwrap_or_default()
+        // Get the document URI from the hint's data field
+        let uri: Uri = if let Some(data) = &hint.data {
+            data.get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| "file:///unknown".parse().unwrap())
         } else {
-            String::new()
+            "file:///unknown".parse().unwrap()
         };
 
-        let parse_result = parse(&text);
+        let (_text, parse_result) = self.get_document_data(&uri);
         let resolved = handle_inlay_hint_resolve(hint, &parse_result);
 
         serde_json::to_value(resolved).map_err(|e| e.to_string())
@@ -778,18 +622,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle selection range
         let response = handle_selection_range(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -804,18 +638,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle prepare type hierarchy
         let response = handle_prepare_type_hierarchy(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -830,18 +654,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.item.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle supertypes
         let response = handle_supertypes(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -856,18 +670,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.item.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle subtypes
         let response = handle_subtypes(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -882,18 +686,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle document highlight
         let response = handle_document_highlight(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -908,18 +702,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle linked editing range
         let response = handle_linked_editing_range(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -935,14 +719,13 @@ impl MainLoopState {
 
         let uri = &params.text_document_position.text_document.uri;
 
-        // Get document content from VFS
+        // Get document content from VFS (on-type formatting doesn't need parse result)
         let text = if let Some(path) = uri_to_path(uri) {
             self.vfs.read().get_content(&path).unwrap_or_default()
         } else {
             String::new()
         };
 
-        // Handle on-type formatting (doesn't need parse result)
         let response = handle_on_type_formatting(&params, &text);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -957,18 +740,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle code lens
         let response = handle_code_lens(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -981,20 +754,17 @@ impl MainLoopState {
     ) -> Result<serde_json::Value, String> {
         let lens: CodeLens = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
-        // Get document from VFS (we need to find it from stored lenses or data)
-        let path = {
-            let vfs = self.vfs.read();
-            let p = vfs.paths().next().cloned();
-            p
-        };
-
-        let text = if let Some(path) = path {
-            self.vfs.read().get_content(&path).unwrap_or_default()
+        // Get the document URI from the lens's data field
+        let uri: Uri = if let Some(data) = &lens.data {
+            data.get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| "file:///unknown".parse().unwrap())
         } else {
-            String::new()
+            "file:///unknown".parse().unwrap()
         };
 
-        let parse_result = parse(&text);
+        let (_text, parse_result) = self.get_document_data(&uri);
         let resolved = handle_code_lens_resolve(lens, &parse_result);
 
         serde_json::to_value(resolved).map_err(|e| e.to_string())
@@ -1009,18 +779,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle document color
         let response = handle_document_color(&params, &text, &parse_result);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -1049,16 +809,7 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
-
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
+        let (text, parse_result) = self.get_document_data(uri);
 
         // Handle go-to-declaration (same as definition for Beancount)
         let response = handle_goto_declaration(&params, &text, &parse_result, uri);
@@ -1075,18 +826,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.text_document_position_params.text_document.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle prepare call hierarchy
         let response = handle_prepare_call_hierarchy(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -1101,18 +842,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.item.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle incoming calls
         let response = handle_incoming_calls(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -1127,18 +858,8 @@ impl MainLoopState {
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
         let uri = &params.item.uri;
+        let (text, parse_result) = self.get_document_data(uri);
 
-        // Get document content from VFS
-        let text = if let Some(path) = uri_to_path(uri) {
-            self.vfs.read().get_content(&path).unwrap_or_default()
-        } else {
-            String::new()
-        };
-
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle outgoing calls
         let response = handle_outgoing_calls(&params, &text, &parse_result, uri);
 
         serde_json::to_value(response).map_err(|e| e.to_string())
@@ -1175,20 +896,28 @@ impl MainLoopState {
         let params: ExecuteCommandParams =
             serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
-        // Get the first open document from VFS (commands apply to current doc)
-        let (path, text) = {
-            let vfs = self.vfs.read();
-            let first_path = vfs.paths().next().cloned();
-            match first_path {
-                Some(p) => {
-                    let content = vfs.get_content(&p).unwrap_or_default();
-                    (p, content)
-                }
-                None => {
-                    return Ok(serde_json::json!({
-                        "error": "No document open"
-                    }))
-                }
+        // Try to get URI from command arguments first
+        let uri_from_args: Option<Uri> = params
+            .arguments
+            .first()
+            .and_then(|arg| arg.get("uri"))
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.parse().ok());
+
+        if let Some(uri) = uri_from_args {
+            let (text, parse_result) = self.get_document_data(&uri);
+            let response = handle_execute_command(&params, &text, &parse_result, &uri);
+            return Ok(response.unwrap_or(serde_json::Value::Null));
+        }
+
+        // Fall back to first open document (legacy behavior)
+        let first_path = self.vfs.read().paths().next().cloned();
+        let path = match first_path {
+            Some(p) => p,
+            None => {
+                return Ok(serde_json::json!({
+                    "error": "No document open"
+                }))
             }
         };
 
@@ -1202,10 +931,7 @@ impl MainLoopState {
             .parse()
             .map_err(|e| format!("{:?}", e))?;
 
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle execute command
+        let (text, parse_result) = self.get_document_data(&uri);
         let response = handle_execute_command(&params, &text, &parse_result, &uri);
 
         Ok(response.unwrap_or(serde_json::Value::Null))
@@ -1218,19 +944,17 @@ impl MainLoopState {
     ) -> Result<serde_json::Value, String> {
         let item: CompletionItem = serde_json::from_value(req.params).map_err(|e| e.to_string())?;
 
-        // Get the first open document to resolve against
-        let text = {
-            let vfs = self.vfs.read();
-            let first_path = vfs.paths().next().cloned();
-            first_path
-                .and_then(|path| vfs.get_content(&path))
-                .unwrap_or_default()
+        // Try to get URI from the completion item's data field
+        let uri: Uri = if let Some(data) = &item.data {
+            data.get("uri")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse().ok())
+                .unwrap_or_else(|| "file:///unknown".parse().unwrap())
+        } else {
+            "file:///unknown".parse().unwrap()
         };
 
-        // Parse the document
-        let parse_result = parse(&text);
-
-        // Handle completion resolve
+        let (_text, parse_result) = self.get_document_data(&uri);
         let resolved = handle_completion_resolve(item, &parse_result);
 
         serde_json::to_value(resolved).map_err(|e| e.to_string())

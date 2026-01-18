@@ -62,11 +62,12 @@ pub fn handle_completion(
     parse_result: &ParseResult,
 ) -> Option<CompletionResponse> {
     let position = params.text_document_position.position;
+    let uri = &params.text_document_position.text_document.uri;
     let context = detect_context(source, position);
 
     tracing::debug!("Completion context: {:?} at {:?}", context, position);
 
-    let items = match context {
+    let mut items = match context {
         CompletionContext::LineStart => complete_line_start(),
         CompletionContext::AfterDate => complete_after_date(),
         CompletionContext::ExpectingAccount => complete_account_start(parse_result),
@@ -77,6 +78,12 @@ pub fn handle_completion(
         CompletionContext::InsideString => complete_payee(parse_result),
         CompletionContext::Unknown => return None,
     };
+
+    // Add URI to each item's data for resolve
+    let uri_data = serde_json::json!({ "uri": uri.as_str() });
+    for item in &mut items {
+        item.data = Some(uri_data.clone());
+    }
 
     if items.is_empty() {
         None

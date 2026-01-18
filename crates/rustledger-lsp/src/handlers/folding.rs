@@ -9,6 +9,8 @@ use lsp_types::{FoldingRange, FoldingRangeKind, FoldingRangeParams};
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::LineIndex;
+
 /// Handle a folding range request.
 pub fn handle_folding_ranges(
     _params: &FoldingRangeParams,
@@ -17,12 +19,15 @@ pub fn handle_folding_ranges(
 ) -> Option<Vec<FoldingRange>> {
     let mut ranges = Vec::new();
 
+    // Build line index once for O(log n) lookups
+    let line_index = LineIndex::new(source);
+
     // Add folding ranges for transactions (multi-line)
     for spanned in &parse_result.directives {
         if let Directive::Transaction(txn) = &spanned.value {
             if !txn.postings.is_empty() {
-                let (start_line, _) = byte_offset_to_position(source, spanned.span.start);
-                let (end_line, _) = byte_offset_to_position(source, spanned.span.end);
+                let (start_line, _) = line_index.offset_to_position(spanned.span.start);
+                let (end_line, _) = line_index.offset_to_position(spanned.span.end);
 
                 // Only fold if spans multiple lines
                 if end_line > start_line {
@@ -155,26 +160,6 @@ fn is_section_header(line: &str) -> bool {
         || content.starts_with("###")
         || content.starts_with("***")
         || (content.len() > 3 && content.chars().take(3).all(|c| c == '='))
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

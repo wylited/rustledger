@@ -11,6 +11,8 @@ use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 use std::collections::HashMap;
 
+use super::utils::{is_account_like, is_currency_like_simple};
+
 /// Handle a completion item resolve request.
 /// This adds detailed documentation to completion items.
 pub fn handle_completion_resolve(
@@ -55,30 +57,12 @@ pub fn handle_completion_resolve(
             resolved.documentation = Some(resolve_account_documentation(label, parse_result));
         }
         // Check if it looks like a currency (all caps, 3-4 chars)
-        else if is_currency_like(label) {
+        else if is_currency_like_simple(label) {
             resolved.documentation = Some(resolve_currency_documentation(label, parse_result));
         }
     }
 
     resolved
-}
-
-/// Check if a string looks like an account.
-fn is_account_like(s: &str) -> bool {
-    s.contains(':')
-        && (s.starts_with("Assets")
-            || s.starts_with("Liabilities")
-            || s.starts_with("Equity")
-            || s.starts_with("Income")
-            || s.starts_with("Expenses"))
-}
-
-/// Check if a string looks like a currency.
-fn is_currency_like(s: &str) -> bool {
-    s.len() >= 2
-        && s.len() <= 24
-        && s.chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 /// Resolve documentation for an account completion.
@@ -253,6 +237,7 @@ fn resolve_payee_documentation(payee: &str, parse_result: &ParseResult) -> Docum
 
 #[cfg(test)]
 mod tests {
+    use super::super::utils::{is_account_like, is_currency_like_simple};
     use super::*;
     use rustledger_parser::parse;
 
@@ -317,10 +302,10 @@ mod tests {
 
     #[test]
     fn test_is_currency_like() {
-        assert!(is_currency_like("USD"));
-        assert!(is_currency_like("AAPL"));
-        assert!(is_currency_like("BTC"));
-        assert!(!is_currency_like("Assets:Bank"));
-        assert!(!is_currency_like("hello world"));
+        assert!(is_currency_like_simple("USD"));
+        assert!(is_currency_like_simple("AAPL"));
+        assert!(is_currency_like_simple("BTC"));
+        assert!(!is_currency_like_simple("Assets:Bank"));
+        assert!(!is_currency_like_simple("hello world"));
     }
 }

@@ -15,6 +15,8 @@ use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 use std::collections::{HashMap, HashSet};
 
+use super::utils::byte_offset_to_position;
+
 /// Handle a code action request.
 pub fn handle_code_actions(
     params: &CodeActionParams,
@@ -319,26 +321,6 @@ fn check_unbalanced_transactions(
     }
 
     None
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

@@ -835,6 +835,8 @@ pub struct ParsedLedger {
     parse_errors: Vec<Error>,
     /// Validation errors.
     validation_errors: Vec<Error>,
+    /// Cached editor data (accounts, currencies, payees, line index).
+    editor_cache: editor::EditorCache,
 }
 
 #[wasm_bindgen]
@@ -847,6 +849,9 @@ impl ParsedLedger {
         let load = load_and_interpolate(source);
         let validation_errors = run_validation(&load);
 
+        // Build editor cache once for efficient editor operations
+        let editor_cache = editor::EditorCache::new(source, &load.parse_result);
+
         Self {
             source: source.to_string(),
             parse_result: load.parse_result,
@@ -854,6 +859,7 @@ impl ParsedLedger {
             options: load.options,
             parse_errors: load.errors,
             validation_errors,
+            editor_cache,
         }
     }
 
@@ -1094,9 +1100,11 @@ impl ParsedLedger {
     /// Get completions at the given position.
     ///
     /// Returns context-aware completions for accounts, currencies, directives, etc.
+    /// Uses cached account/currency/payee data for efficiency.
     #[wasm_bindgen(js_name = "getCompletions")]
     pub fn get_completions(&self, line: u32, character: u32) -> Result<JsValue, JsError> {
-        let result = editor::get_completions(&self.source, line, character, &self.parse_result);
+        let result =
+            editor::get_completions_cached(&self.source, line, character, &self.editor_cache);
         to_js(&result)
     }
 
@@ -1105,25 +1113,39 @@ impl ParsedLedger {
     /// Returns documentation for accounts, currencies, and directive keywords.
     #[wasm_bindgen(js_name = "getHoverInfo")]
     pub fn get_hover_info(&self, line: u32, character: u32) -> Result<JsValue, JsError> {
-        let result = editor::get_hover_info(&self.source, line, character, &self.parse_result);
+        let result = editor::get_hover_info_cached(
+            &self.source,
+            line,
+            character,
+            &self.parse_result,
+            &self.editor_cache,
+        );
         to_js(&result)
     }
 
     /// Get the definition location for the symbol at the given position.
     ///
     /// Returns the location of the `open` or `commodity` directive for accounts/currencies.
+    /// Uses cached `LineIndex` for O(log n) position lookups.
     #[wasm_bindgen(js_name = "getDefinition")]
     pub fn get_definition(&self, line: u32, character: u32) -> Result<JsValue, JsError> {
-        let result = editor::get_definition(&self.source, line, character, &self.parse_result);
+        let result = editor::get_definition_cached(
+            &self.source,
+            line,
+            character,
+            &self.parse_result,
+            &self.editor_cache,
+        );
         to_js(&result)
     }
 
     /// Get all document symbols for the outline view.
     ///
     /// Returns a hierarchical list of all directives with their positions.
+    /// Uses cached `LineIndex` for O(log n) position lookups.
     #[wasm_bindgen(js_name = "getDocumentSymbols")]
     pub fn get_document_symbols(&self) -> Result<JsValue, JsError> {
-        let result = editor::get_document_symbols(&self.source, &self.parse_result);
+        let result = editor::get_document_symbols_cached(&self.parse_result, &self.editor_cache);
         to_js(&result)
     }
 }

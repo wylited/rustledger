@@ -11,6 +11,8 @@ use rustledger_core::{Decimal, Directive};
 use rustledger_parser::ParseResult;
 use std::collections::HashMap;
 
+use super::utils::byte_offset_to_position;
+
 /// Handle an inlay hints request.
 pub fn handle_inlay_hints(
     params: &InlayHintParams,
@@ -18,6 +20,7 @@ pub fn handle_inlay_hints(
     parse_result: &ParseResult,
 ) -> Option<Vec<InlayHint>> {
     let range = params.range;
+    let uri = params.text_document.uri.as_str();
     let mut hints = Vec::new();
     let lines: Vec<&str> = source.lines().collect();
 
@@ -52,6 +55,7 @@ pub fn handle_inlay_hints(
 
                             // Store data for resolve - include account for rich tooltip
                             let data = serde_json::json!({
+                                "uri": uri,
                                 "kind": "inferred_amount",
                                 "account": posting.account.to_string(),
                                 "amount": amount.to_string(),
@@ -181,26 +185,6 @@ fn calculate_inferred_amount(txn: &rustledger_core::Transaction) -> Option<(Deci
     } else {
         None
     }
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

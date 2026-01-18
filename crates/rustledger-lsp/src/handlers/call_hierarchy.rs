@@ -15,6 +15,8 @@ use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 use std::collections::HashMap;
 
+use super::utils::{byte_offset_to_position, get_word_at_position, is_account_like};
+
 /// Handle a prepare call hierarchy request.
 /// Returns the account at the cursor position as a CallHierarchyItem.
 pub fn handle_prepare_call_hierarchy(
@@ -291,69 +293,6 @@ fn account_exists(account: &str, parse_result: &ParseResult) -> bool {
         }
     }
     false
-}
-
-/// Get the word at a given position in a line.
-fn get_word_at_position(line: &str, col: usize) -> Option<(String, usize, usize)> {
-    if col > line.len() {
-        return None;
-    }
-
-    let chars: Vec<char> = line.chars().collect();
-
-    // Find word start
-    let mut start = col;
-    while start > 0 && is_word_char(chars.get(start - 1).copied().unwrap_or(' ')) {
-        start -= 1;
-    }
-
-    // Find word end
-    let mut end = col;
-    while end < chars.len() && is_word_char(chars[end]) {
-        end += 1;
-    }
-
-    if start == end {
-        return None;
-    }
-
-    let word: String = chars[start..end].iter().collect();
-    Some((word, start, end))
-}
-
-/// Check if a character is part of a word.
-fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == ':' || c == '-' || c == '_'
-}
-
-/// Check if a string looks like an account name.
-fn is_account_like(s: &str) -> bool {
-    s.contains(':')
-        && (s.starts_with("Assets")
-            || s.starts_with("Liabilities")
-            || s.starts_with("Equity")
-            || s.starts_with("Income")
-            || s.starts_with("Expenses"))
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

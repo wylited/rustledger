@@ -12,6 +12,8 @@ use lsp_types::{
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::byte_offset_to_position;
+
 /// Red color for negative amounts.
 const COLOR_NEGATIVE: Color = Color {
     red: 0.9,
@@ -165,26 +167,6 @@ fn find_amount_range(line: &str, amount_str: &str, line_num: u32) -> Option<Rang
     }
 
     None
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

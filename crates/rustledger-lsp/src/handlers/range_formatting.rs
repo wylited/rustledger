@@ -6,6 +6,8 @@ use lsp_types::{DocumentRangeFormattingParams, Position, Range, TextEdit};
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::byte_offset_to_position;
+
 /// Handle a range formatting request.
 pub fn handle_range_formatting(
     params: &DocumentRangeFormattingParams,
@@ -127,26 +129,6 @@ fn format_posting_line(
 
     let _ = account; // suppress unused warning
     None
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

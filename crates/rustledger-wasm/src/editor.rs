@@ -12,6 +12,77 @@ use crate::types::{
 };
 
 // =============================================================================
+// Editor Cache
+// =============================================================================
+
+/// Cached data for editor features to avoid repeated extraction.
+///
+/// This is built once when a `ParsedLedger` is created and reused for all
+/// completion, hover, and other editor requests.
+#[derive(Debug, Clone)]
+pub struct EditorCache {
+    /// All unique account names in the document.
+    pub accounts: Vec<String>,
+    /// All unique currencies in the document.
+    pub currencies: Vec<String>,
+    /// All unique payees in the document.
+    pub payees: Vec<String>,
+    /// Line index for efficient offset-to-position conversion.
+    pub line_index: LineIndex,
+}
+
+impl EditorCache {
+    /// Build the editor cache from source and parse result.
+    pub fn new(source: &str, parse_result: &ParseResult) -> Self {
+        Self {
+            accounts: extract_accounts(parse_result),
+            currencies: extract_currencies(parse_result),
+            payees: extract_payees(parse_result),
+            line_index: LineIndex::new(source),
+        }
+    }
+}
+
+/// Line index for efficient offset-to-position conversion.
+///
+/// Building the index is O(n), but lookups are O(log(lines)).
+#[derive(Debug, Clone)]
+pub struct LineIndex {
+    /// Byte offset of the start of each line.
+    line_starts: Vec<usize>,
+    /// Total length of the source.
+    len: usize,
+}
+
+impl LineIndex {
+    /// Build a line index from source text.
+    pub fn new(source: &str) -> Self {
+        let mut line_starts = vec![0];
+        for (i, ch) in source.char_indices() {
+            if ch == '\n' {
+                line_starts.push(i + 1);
+            }
+        }
+        Self {
+            line_starts,
+            len: source.len(),
+        }
+    }
+
+    /// Convert a byte offset to (line, column) position (0-based).
+    pub fn offset_to_position(&self, offset: usize) -> (u32, u32) {
+        let offset = offset.min(self.len);
+        let line = match self.line_starts.binary_search(&offset) {
+            Ok(line) => line,
+            Err(line) => line.saturating_sub(1),
+        };
+        let line_start = self.line_starts[line];
+        let col = offset - line_start;
+        (line as u32, col as u32)
+    }
+}
+
+// =============================================================================
 // Constants
 // =============================================================================
 
@@ -80,23 +151,23 @@ impl std::fmt::Display for CompletionContext {
 // Completions
 // =============================================================================
 
-/// Get completions at the given position.
-pub fn get_completions(
+/// Get completions at the given position (using cached data).
+pub fn get_completions_cached(
     source: &str,
     line: u32,
     character: u32,
-    parse_result: &ParseResult,
+    cache: &EditorCache,
 ) -> EditorCompletionResult {
     let context = detect_context(source, line, character);
     let completions = match &context {
         CompletionContext::LineStart => complete_line_start(),
         CompletionContext::AfterDate => complete_after_date(),
-        CompletionContext::ExpectingAccount => complete_account_start(parse_result),
+        CompletionContext::ExpectingAccount => complete_account_start_cached(&cache.accounts),
         CompletionContext::AccountSegment { prefix } => {
-            complete_account_segment(prefix, parse_result)
+            complete_account_segment_cached(prefix, &cache.accounts)
         }
-        CompletionContext::ExpectingCurrency => complete_currency(parse_result),
-        CompletionContext::InsideString => complete_payee(parse_result),
+        CompletionContext::ExpectingCurrency => complete_currency_cached(&cache.currencies),
+        CompletionContext::InsideString => complete_payee_cached(&cache.payees),
         CompletionContext::Unknown => Vec::new(),
     };
 
@@ -104,6 +175,18 @@ pub fn get_completions(
         completions,
         context: context.to_string(),
     }
+}
+
+/// Get completions at the given position (legacy, extracts data each time).
+#[allow(dead_code)] // Used by tests
+pub fn get_completions(
+    source: &str,
+    line: u32,
+    character: u32,
+    parse_result: &ParseResult,
+) -> EditorCompletionResult {
+    let cache = EditorCache::new(source, parse_result);
+    get_completions_cached(source, line, character, &cache)
 }
 
 /// Detect the completion context from cursor position.
@@ -218,8 +301,8 @@ fn complete_after_date() -> Vec<EditorCompletion> {
         .collect()
 }
 
-/// Complete account name start (account types).
-fn complete_account_start(parse_result: &ParseResult) -> Vec<EditorCompletion> {
+/// Complete account name start (account types) - cached version.
+fn complete_account_start_cached(accounts: &[String]) -> Vec<EditorCompletion> {
     let mut items: Vec<EditorCompletion> = ACCOUNT_TYPES
         .iter()
         .map(|&t| EditorCompletion {
@@ -231,8 +314,7 @@ fn complete_account_start(parse_result: &ParseResult) -> Vec<EditorCompletion> {
         .collect();
 
     // Also offer known accounts from the file
-    let known_accounts = extract_accounts(parse_result);
-    for account in known_accounts.iter().take(20) {
+    for account in accounts.iter().take(20) {
         items.push(EditorCompletion {
             label: account.clone(),
             kind: CompletionKind::Account,
@@ -244,14 +326,9 @@ fn complete_account_start(parse_result: &ParseResult) -> Vec<EditorCompletion> {
     items
 }
 
-/// Complete account segment after colon.
-fn complete_account_segment(prefix: &str, parse_result: &ParseResult) -> Vec<EditorCompletion> {
-    let known_accounts = extract_accounts(parse_result);
-
-    let matching: Vec<_> = known_accounts
-        .iter()
-        .filter(|a| a.starts_with(prefix))
-        .collect();
+/// Complete account segment after colon - cached version.
+fn complete_account_segment_cached(prefix: &str, accounts: &[String]) -> Vec<EditorCompletion> {
+    let matching: Vec<_> = accounts.iter().filter(|a| a.starts_with(prefix)).collect();
 
     let mut segments: Vec<String> = matching
         .iter()
@@ -292,13 +369,12 @@ fn complete_account_segment(prefix: &str, parse_result: &ParseResult) -> Vec<Edi
         .collect()
 }
 
-/// Complete currency after amount.
-fn complete_currency(parse_result: &ParseResult) -> Vec<EditorCompletion> {
-    let currencies = extract_currencies(parse_result);
+/// Complete currency after amount - cached version.
+fn complete_currency_cached(currencies: &[String]) -> Vec<EditorCompletion> {
     currencies
-        .into_iter()
+        .iter()
         .map(|c| EditorCompletion {
-            label: c,
+            label: c.clone(),
             kind: CompletionKind::Currency,
             detail: Some("Currency".to_string()),
             insert_text: None,
@@ -306,14 +382,13 @@ fn complete_currency(parse_result: &ParseResult) -> Vec<EditorCompletion> {
         .collect()
 }
 
-/// Complete payee/narration inside string.
-fn complete_payee(parse_result: &ParseResult) -> Vec<EditorCompletion> {
-    let payees = extract_payees(parse_result);
+/// Complete payee/narration inside string - cached version.
+fn complete_payee_cached(payees: &[String]) -> Vec<EditorCompletion> {
     payees
-        .into_iter()
+        .iter()
         .take(20)
         .map(|p| EditorCompletion {
-            label: p,
+            label: p.clone(),
             kind: CompletionKind::Payee,
             detail: Some("Known payee".to_string()),
             insert_text: None,
@@ -324,6 +399,18 @@ fn complete_payee(parse_result: &ParseResult) -> Vec<EditorCompletion> {
 // =============================================================================
 // Hover
 // =============================================================================
+
+/// Get hover information at the given position (using cached data).
+pub fn get_hover_info_cached(
+    source: &str,
+    line: u32,
+    character: u32,
+    parse_result: &ParseResult,
+    _cache: &EditorCache,
+) -> Option<EditorHoverInfo> {
+    // Hover doesn't benefit much from caching, but we keep the API consistent
+    get_hover_info(source, line, character, parse_result)
+}
 
 /// Get hover information at the given position.
 pub fn get_hover_info(
@@ -460,25 +547,30 @@ fn get_directive_hover_info(keyword: &str) -> Option<String> {
 // Go-to-Definition
 // =============================================================================
 
-/// Get the definition location for the symbol at the given position.
-pub fn get_definition(
+/// Get the definition location for the symbol at the given position (using cached data).
+pub fn get_definition_cached(
     source: &str,
     line: u32,
     character: u32,
     parse_result: &ParseResult,
+    cache: &EditorCache,
 ) -> Option<EditorLocation> {
     let word = get_word_at_position(source, line, character)?;
 
     // Check if it's an account name
     if word.contains(':') || is_account_type(&word) {
-        if let Some(location) = find_account_definition(&word, parse_result, source) {
+        if let Some(location) =
+            find_account_definition_cached(&word, parse_result, &cache.line_index)
+        {
             return Some(location);
         }
     }
 
     // Check if it's a currency
     if is_currency_like(&word) {
-        if let Some(location) = find_currency_definition(&word, parse_result, source) {
+        if let Some(location) =
+            find_currency_definition_cached(&word, parse_result, &cache.line_index)
+        {
             return Some(location);
         }
     }
@@ -486,18 +578,17 @@ pub fn get_definition(
     None
 }
 
-/// Find the definition of an account (the Open directive).
-fn find_account_definition(
+/// Find the definition of an account (the Open directive) - cached version using `LineIndex`.
+fn find_account_definition_cached(
     account: &str,
     parse_result: &ParseResult,
-    source: &str,
+    line_index: &LineIndex,
 ) -> Option<EditorLocation> {
     for spanned_directive in &parse_result.directives {
         if let Directive::Open(open) = &spanned_directive.value {
             let open_account = open.account.to_string();
             if open_account == account || account.starts_with(&format!("{open_account}:")) {
-                let (line, character) =
-                    byte_offset_to_position(source, spanned_directive.span.start);
+                let (line, character) = line_index.offset_to_position(spanned_directive.span.start);
                 return Some(EditorLocation { line, character });
             }
         }
@@ -505,17 +596,28 @@ fn find_account_definition(
     None
 }
 
-/// Find the definition of a currency (the Commodity directive).
-fn find_currency_definition(
+/// Get the definition location for the symbol at the given position (legacy, creates cache each time).
+#[allow(dead_code)] // Used by tests
+pub fn get_definition(
+    source: &str,
+    line: u32,
+    character: u32,
+    parse_result: &ParseResult,
+) -> Option<EditorLocation> {
+    let cache = EditorCache::new(source, parse_result);
+    get_definition_cached(source, line, character, parse_result, &cache)
+}
+
+/// Find the definition of a currency (the Commodity directive) - cached version using `LineIndex`.
+fn find_currency_definition_cached(
     currency: &str,
     parse_result: &ParseResult,
-    source: &str,
+    line_index: &LineIndex,
 ) -> Option<EditorLocation> {
     for spanned_directive in &parse_result.directives {
         if let Directive::Commodity(comm) = &spanned_directive.value {
             if comm.currency.as_ref() == currency {
-                let (line, character) =
-                    byte_offset_to_position(source, spanned_directive.span.start);
+                let (line, character) = line_index.offset_to_position(spanned_directive.span.start);
                 return Some(EditorLocation { line, character });
             }
         }
@@ -527,26 +629,52 @@ fn find_currency_definition(
 // Document Symbols
 // =============================================================================
 
-/// Get all document symbols (for outline view).
-pub fn get_document_symbols(source: &str, parse_result: &ParseResult) -> Vec<EditorDocumentSymbol> {
+/// Get all document symbols (for outline view) - cached version using `LineIndex`.
+pub fn get_document_symbols_cached(
+    parse_result: &ParseResult,
+    cache: &EditorCache,
+) -> Vec<EditorDocumentSymbol> {
     parse_result
         .directives
         .iter()
         .filter_map(|spanned| {
-            directive_to_symbol(&spanned.value, spanned.span.start, spanned.span.end, source)
+            directive_to_symbol_cached(
+                &spanned.value,
+                spanned.span.start,
+                spanned.span.end,
+                &cache.line_index,
+            )
         })
         .collect()
 }
 
-/// Convert a directive to a document symbol.
-fn directive_to_symbol(
+/// Get all document symbols (for outline view) - legacy version.
+#[allow(dead_code)] // Used by tests
+pub fn get_document_symbols(source: &str, parse_result: &ParseResult) -> Vec<EditorDocumentSymbol> {
+    let line_index = LineIndex::new(source);
+    parse_result
+        .directives
+        .iter()
+        .filter_map(|spanned| {
+            directive_to_symbol_cached(
+                &spanned.value,
+                spanned.span.start,
+                spanned.span.end,
+                &line_index,
+            )
+        })
+        .collect()
+}
+
+/// Convert a directive to a document symbol - cached version using `LineIndex`.
+fn directive_to_symbol_cached(
     directive: &Directive,
     start_offset: usize,
     end_offset: usize,
-    source: &str,
+    line_index: &LineIndex,
 ) -> Option<EditorDocumentSymbol> {
-    let (start_line, start_col) = byte_offset_to_position(source, start_offset);
-    let (end_line, end_col) = byte_offset_to_position(source, end_offset);
+    let (start_line, start_col) = line_index.offset_to_position(start_offset);
+    let (end_line, end_col) = line_index.offset_to_position(end_offset);
 
     let range = EditorRange {
         start_line,
@@ -848,26 +976,6 @@ fn is_currency_like(s: &str) -> bool {
             .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
-/// Convert a byte offset to a line/column position (0-based).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
-}
-
 /// Extract all account names from parse result.
 fn extract_accounts(parse_result: &ParseResult) -> Vec<String> {
     let mut accounts = Vec::new();
@@ -1100,5 +1208,89 @@ mod tests {
         assert_eq!(symbols[1].kind, SymbolKind::Transaction);
         assert!(symbols[1].children.is_some());
         assert_eq!(symbols[1].children.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    #[ignore = "Manual benchmark - run with: cargo test -p rustledger-wasm --release -- --ignored --nocapture"]
+    fn bench_editor_cache_performance() {
+        use std::time::Instant;
+
+        // Load test file
+        let source = std::fs::read_to_string("../../spec/fixtures/examples/example.beancount")
+            .expect("Failed to read example.beancount");
+
+        let parse_result = parse(&source);
+        let directive_count = parse_result.directives.len();
+
+        println!("\n=== Editor Performance Benchmark ===");
+        println!("File: example.beancount");
+        println!("Lines: {}", source.lines().count());
+        println!("Directives: {directive_count}");
+
+        // Measure cache build time (one-time cost)
+        let start = Instant::now();
+        let cache = EditorCache::new(&source, &parse_result);
+        let cache_build_time = start.elapsed();
+        println!("\nCache build time: {cache_build_time:?}");
+        println!("  Accounts cached: {}", cache.accounts.len());
+        println!("  Currencies cached: {}", cache.currencies.len());
+        println!("  Payees cached: {}", cache.payees.len());
+
+        // Measure cached operations (multiple calls)
+        let iterations = 1000;
+
+        // Completions
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = get_completions_cached(&source, 100, 2, &cache);
+        }
+        let completions_time = start.elapsed();
+        println!(
+            "\nCompletions ({iterations}x): {:?} ({:?}/call)",
+            completions_time,
+            completions_time / iterations
+        );
+
+        // Document symbols
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = get_document_symbols_cached(&parse_result, &cache);
+        }
+        let symbols_time = start.elapsed();
+        println!(
+            "Document symbols ({iterations}x): {:?} ({:?}/call)",
+            symbols_time,
+            symbols_time / iterations
+        );
+
+        // Definition lookup
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = get_definition_cached(&source, 500, 5, &parse_result, &cache);
+        }
+        let definition_time = start.elapsed();
+        println!(
+            "Definition lookup ({iterations}x): {:?} ({:?}/call)",
+            definition_time,
+            definition_time / iterations
+        );
+
+        // Compare with legacy (non-cached) approach
+        println!("\n--- Legacy (non-cached) comparison ---");
+
+        let start = Instant::now();
+        for _ in 0..iterations {
+            let _ = get_completions(&source, 100, 2, &parse_result);
+        }
+        let legacy_completions_time = start.elapsed();
+        println!(
+            "Legacy completions ({iterations}x): {:?} ({:?}/call)",
+            legacy_completions_time,
+            legacy_completions_time / iterations
+        );
+
+        let speedup =
+            legacy_completions_time.as_nanos() as f64 / completions_time.as_nanos() as f64;
+        println!("\nSpeedup (cached vs legacy): {speedup:.1}x faster");
     }
 }

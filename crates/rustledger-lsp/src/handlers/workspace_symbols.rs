@@ -12,11 +12,14 @@ use lsp_types::{
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 use std::collections::HashSet;
+use std::sync::Arc;
+
+use super::utils::byte_offset_to_position;
 
 /// Handle a workspace symbol request.
 pub fn handle_workspace_symbols(
     params: &WorkspaceSymbolParams,
-    documents: &[(Uri, String, ParseResult)],
+    documents: &[(Uri, String, Arc<ParseResult>)],
 ) -> Option<Vec<SymbolInformation>> {
     let query = params.query.to_lowercase();
     let mut symbols = Vec::new();
@@ -150,26 +153,6 @@ fn collect_symbols_from_document(
     }
 }
 
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,7 +166,7 @@ mod tests {
 2024-01-01 commodity EUR
 "#;
         let uri: Uri = "file:///test.beancount".parse().unwrap();
-        let result = parse(source);
+        let result = Arc::new(parse(source));
         let docs = vec![(uri, source.to_string(), result)];
 
         let params = WorkspaceSymbolParams {
@@ -209,7 +192,7 @@ mod tests {
 2024-01-01 open Expenses:Food
 "#;
         let uri: Uri = "file:///test.beancount".parse().unwrap();
-        let result = parse(source);
+        let result = Arc::new(parse(source));
         let docs = vec![(uri, source.to_string(), result)];
 
         let params = WorkspaceSymbolParams {

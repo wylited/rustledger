@@ -12,19 +12,23 @@ use rustledger_core::{Decimal, Directive};
 use rustledger_parser::ParseResult;
 use std::collections::HashMap;
 
+use super::utils::LineIndex;
+
 /// Handle a code lens request.
 pub fn handle_code_lens(
-    _params: &CodeLensParams,
+    params: &CodeLensParams,
     source: &str,
     parse_result: &ParseResult,
 ) -> Option<Vec<CodeLens>> {
+    let line_index = LineIndex::new(source);
     let mut lenses = Vec::new();
+    let uri = params.text_document.uri.as_str();
 
     // Collect account usage statistics
     let account_stats = collect_account_stats(parse_result);
 
     for spanned in &parse_result.directives {
-        let (line, _) = byte_offset_to_position(source, spanned.span.start);
+        let (line, _) = line_index.offset_to_position(spanned.span.start);
 
         match &spanned.value {
             Directive::Open(open) => {
@@ -57,7 +61,7 @@ pub fn handle_code_lens(
                         command: "rledger.showAccountDetails".to_string(),
                         arguments: Some(vec![serde_json::json!(account)]),
                     }),
-                    data: None,
+                    data: Some(serde_json::json!({ "uri": uri })),
                 });
             }
             Directive::Transaction(txn) => {
@@ -90,12 +94,13 @@ pub fn handle_code_lens(
                         command: "rledger.showTransactionDetails".to_string(),
                         arguments: None,
                     }),
-                    data: None,
+                    data: Some(serde_json::json!({ "uri": uri })),
                 });
             }
             Directive::Balance(bal) => {
                 // Store data for resolve - verification is deferred
                 let data = serde_json::json!({
+                    "uri": uri,
                     "kind": "balance",
                     "account": bal.account.to_string(),
                     "date": bal.date.to_string(),
@@ -239,26 +244,6 @@ fn collect_account_stats(parse_result: &ParseResult) -> HashMap<String, AccountS
     }
 
     stats
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]

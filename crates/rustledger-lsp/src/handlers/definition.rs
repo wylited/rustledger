@@ -8,6 +8,10 @@ use lsp_types::{GotoDefinitionParams, GotoDefinitionResponse, Location, Position
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
+use super::utils::{
+    byte_offset_to_position, get_word_at_source_position, is_account_type, is_currency_like_simple,
+};
+
 /// Handle a go-to-definition request.
 pub fn handle_goto_definition(
     params: &GotoDefinitionParams,
@@ -18,7 +22,7 @@ pub fn handle_goto_definition(
     let position = params.text_document_position_params.position;
 
     // Get the word at the cursor position
-    let word = get_word_at_position(source, position)?;
+    let word = get_word_at_source_position(source, position)?;
 
     tracing::debug!("Go-to-definition for word: {:?}", word);
 
@@ -30,65 +34,13 @@ pub fn handle_goto_definition(
     }
 
     // Check if it's a currency
-    if is_currency_like(&word) {
+    if is_currency_like_simple(&word) {
         if let Some(location) = find_currency_definition(&word, parse_result, source, uri) {
             return Some(GotoDefinitionResponse::Scalar(location));
         }
     }
 
     None
-}
-
-/// Get the word at a given position in the source.
-fn get_word_at_position(source: &str, position: Position) -> Option<String> {
-    let line = source.lines().nth(position.line as usize)?;
-    let col = position.character as usize;
-
-    if col > line.len() {
-        return None;
-    }
-
-    // Find word boundaries
-    let chars: Vec<char> = line.chars().collect();
-
-    // Find start of word
-    let mut start = col;
-    while start > 0 && is_word_char(chars.get(start - 1).copied()?) {
-        start -= 1;
-    }
-
-    // Find end of word
-    let mut end = col;
-    while end < chars.len() && is_word_char(chars[end]) {
-        end += 1;
-    }
-
-    if start == end {
-        return None;
-    }
-
-    Some(chars[start..end].iter().collect())
-}
-
-/// Check if a character is part of a word (including account separators).
-fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == ':' || c == '_' || c == '-'
-}
-
-/// Check if a string looks like an account type.
-fn is_account_type(s: &str) -> bool {
-    matches!(
-        s,
-        "Assets" | "Liabilities" | "Equity" | "Income" | "Expenses"
-    )
-}
-
-/// Check if a string looks like a currency (all uppercase, 2-5 chars).
-fn is_currency_like(s: &str) -> bool {
-    s.len() >= 2
-        && s.len() <= 5
-        && s.chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
 }
 
 /// Find the definition of an account (the Open directive).
@@ -147,64 +99,4 @@ fn find_currency_definition(
         }
     }
     None
-}
-
-/// Convert a byte offset to a line/column position (0-based for LSP).
-fn byte_offset_to_position(source: &str, offset: usize) -> (u32, u32) {
-    let mut line = 0u32;
-    let mut col = 0u32;
-
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-    }
-
-    (line, col)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get_word_at_position() {
-        let source = "2024-01-01 open Assets:Bank USD";
-
-        // "open" at position 11
-        let word = get_word_at_position(source, Position::new(0, 11));
-        assert_eq!(word, Some("open".to_string()));
-
-        // "Assets:Bank" at position 16
-        let word = get_word_at_position(source, Position::new(0, 20));
-        assert_eq!(word, Some("Assets:Bank".to_string()));
-
-        // "USD" at position 28
-        let word = get_word_at_position(source, Position::new(0, 28));
-        assert_eq!(word, Some("USD".to_string()));
-    }
-
-    #[test]
-    fn test_is_currency_like() {
-        assert!(is_currency_like("USD"));
-        assert!(is_currency_like("EUR"));
-        assert!(is_currency_like("BTC"));
-        assert!(!is_currency_like("usd")); // lowercase
-        assert!(!is_currency_like("U")); // too short
-        assert!(!is_currency_like("TOOLONG")); // too long
-    }
-
-    #[test]
-    fn test_is_account_type() {
-        assert!(is_account_type("Assets"));
-        assert!(is_account_type("Liabilities"));
-        assert!(!is_account_type("assets")); // lowercase
-        assert!(!is_account_type("Bank")); // not a root type
-    }
 }
