@@ -11,11 +11,13 @@ jobs:
   validate:
     name: Validate branch name
     runs-on: ubuntu-latest
+    # Skip validation for Dependabot PRs (they use their own naming convention)
+    if: github.actor != 'dependabot[bot]'
     steps:
       - name: Check branch name
         run: |
           BRANCH="${{ github.head_ref }}"
-          PATTERN="^(feature|fix|docs|chore|refactor|release|hotfix|claude)/[a-zA-Z0-9][a-zA-Z0-9-]*$"
+          PATTERN="^(feature|fix|docs|chore|refactor|release|hotfix|claude|dependabot)/[a-zA-Z0-9][a-zA-Z0-9/_-]*$"
 
           if [[ "$BRANCH" =~ $PATTERN ]]; then
             echo "✅ Branch name '$BRANCH' is valid"
@@ -23,8 +25,8 @@ jobs:
             echo "❌ Branch name '$BRANCH' does not match pattern"
             echo ""
             echo "Branch names must follow: <type>/<description>"
-            echo "  Types: feature, fix, docs, chore, refactor, release, hotfix, claude"
-            echo "  Description: letters, numbers, hyphens"
+            echo "  Types: feature, fix, docs, chore, refactor, release, hotfix, claude, dependabot"
+            echo "  Description: letters, numbers, hyphens, underscores, slashes"
             echo ""
             echo "Examples:"
             echo "  feature/add-csv-export"
