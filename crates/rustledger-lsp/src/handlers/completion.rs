@@ -15,6 +15,9 @@ use rustledger_parser::ParseResult;
 /// Standard Beancount account types.
 const ACCOUNT_TYPES: &[&str] = &["Assets", "Liabilities", "Equity", "Income", "Expenses"];
 
+/// Default currencies to suggest when no currencies are found in the document.
+const DEFAULT_CURRENCIES: &[&str] = &["USD", "EUR", "GBP"];
+
 /// Standard Beancount directives.
 const DIRECTIVES: &[&str] = &[
     "open",
@@ -432,9 +435,9 @@ fn extract_currencies(parse_result: &ParseResult) -> Vec<String> {
     }
 
     // Add common defaults
-    currencies.push("USD".to_string());
-    currencies.push("EUR".to_string());
-    currencies.push("GBP".to_string());
+    for currency in DEFAULT_CURRENCIES {
+        currencies.push((*currency).to_string());
+    }
 
     currencies.sort();
     currencies.dedup();

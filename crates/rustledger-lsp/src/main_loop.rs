@@ -246,7 +246,14 @@ impl MainLoopState {
         let response = match result {
             Ok(value) => lsp_server::Response::new_ok(id, value),
             Err(msg) => {
-                lsp_server::Response::new_err(id, lsp_server::ErrorCode::MethodNotFound as i32, msg)
+                // Use MethodNotFound only for truly unknown methods,
+                // InternalError for handler failures
+                let error_code = if msg.starts_with("Unhandled request") {
+                    lsp_server::ErrorCode::MethodNotFound
+                } else {
+                    lsp_server::ErrorCode::InternalError
+                };
+                lsp_server::Response::new_err(id, error_code as i32, msg)
             }
         };
 
