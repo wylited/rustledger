@@ -1,0 +1,16 @@
+# Default owners for everything in the repo
+* @rustledger/maintainers
+
+# CI/CD configuration - require maintainer review
+/.github/ @rustledger/maintainers
+
+# Security-sensitive areas - require maintainer review
+/crates/rustledger-parser/ @rustledger/maintainers
+/crates/rustledger-loader/ @rustledger/maintainers
+/crates/rustledger-plugin/ @rustledger/maintainers
+/SECURITY.md @rustledger/maintainers
+
+# Root configuration files
+/Cargo.toml @rustledger/maintainers
+/Cargo.lock @rustledger/maintainers
+/deny.toml @rustledger/maintainers

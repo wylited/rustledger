@@ -1,6 +1,6 @@
 [package]
 name = "rustledger-plugin"
-description = "Beancount plugin system with 14 native plugins and WASM support"
+description = "Beancount plugin system with 20 native plugins and WASM support"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
