@@ -282,6 +282,24 @@ export interface EditorDocumentSymbol {
     deprecated?: boolean;
 }
 
+/** The kind of reference. */
+export type ReferenceKind = 'account' | 'currency' | 'payee';
+
+/** A reference to a symbol in the document. */
+export interface EditorReference {
+    range: EditorRange;
+    kind: ReferenceKind;
+    is_definition: boolean;
+    context?: string;
+}
+
+/** Result of a find-references request. */
+export interface EditorReferencesResult {
+    symbol: string;
+    kind: ReferenceKind;
+    references: EditorReference[];
+}
+
 /**
  * A parsed and validated ledger that caches the parse result.
  * Use this class when you need to perform multiple operations on the same
@@ -342,6 +360,9 @@ export class ParsedLedger {
 
     /** Get all document symbols for the outline view. */
     getDocumentSymbols(): EditorDocumentSymbol[];
+
+    /** Find all references to the symbol at the given position. */
+    getReferences(line: number, character: number): EditorReferencesResult | null;
 }
 "#;
 
@@ -1146,6 +1167,22 @@ impl ParsedLedger {
     #[wasm_bindgen(js_name = "getDocumentSymbols")]
     pub fn get_document_symbols(&self) -> Result<JsValue, JsError> {
         let result = editor::get_document_symbols_cached(&self.parse_result, &self.editor_cache);
+        to_js(&result)
+    }
+
+    /// Find all references to the symbol at the given position.
+    ///
+    /// Returns all occurrences of accounts, currencies, or payees in the document.
+    /// Uses cached data for efficient lookup.
+    #[wasm_bindgen(js_name = "getReferences")]
+    pub fn get_references(&self, line: u32, character: u32) -> Result<JsValue, JsError> {
+        let result = editor::get_references_cached(
+            &self.source,
+            line,
+            character,
+            &self.parse_result,
+            &self.editor_cache,
+        );
         to_js(&result)
     }
 }
