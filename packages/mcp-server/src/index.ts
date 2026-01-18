@@ -19,6 +19,125 @@ import * as rustledger from "@rustledger/wasm";
 // Initialize WASM module
 rustledger.init();
 
+// ============================================================================
+// Type Definitions for Directives
+// ============================================================================
+
+interface Amount {
+  number: string;
+  currency: string;
+}
+
+interface Posting {
+  account: string;
+  units?: Amount;
+}
+
+interface BaseDirective {
+  type: string;
+  date: string;
+}
+
+interface TransactionDirective extends BaseDirective {
+  type: "transaction";
+  flag: string;
+  payee?: string;
+  narration?: string;
+  tags?: string[];
+  links?: string[];
+  postings: Posting[];
+}
+
+interface OpenDirective extends BaseDirective {
+  type: "open";
+  account: string;
+  currencies?: string[];
+  booking?: string;
+}
+
+interface CloseDirective extends BaseDirective {
+  type: "close";
+  account: string;
+}
+
+interface BalanceDirective extends BaseDirective {
+  type: "balance";
+  account: string;
+  amount: Amount;
+}
+
+interface CommodityDirective extends BaseDirective {
+  type: "commodity";
+  currency: string;
+}
+
+interface PriceDirective extends BaseDirective {
+  type: "price";
+  currency: string;
+  amount: Amount;
+}
+
+interface EventDirective extends BaseDirective {
+  type: "event";
+  event_type: string;
+  value: string;
+}
+
+interface NoteDirective extends BaseDirective {
+  type: "note";
+  account: string;
+  comment: string;
+}
+
+interface DocumentDirective extends BaseDirective {
+  type: "document";
+  account: string;
+  path: string;
+}
+
+interface PadDirective extends BaseDirective {
+  type: "pad";
+  account: string;
+  source_account: string;
+}
+
+interface QueryDirective extends BaseDirective {
+  type: "query";
+  name: string;
+  query_string: string;
+}
+
+interface CustomDirective extends BaseDirective {
+  type: "custom";
+  custom_type: string;
+}
+
+type Directive =
+  | TransactionDirective
+  | OpenDirective
+  | CloseDirective
+  | BalanceDirective
+  | CommodityDirective
+  | PriceDirective
+  | EventDirective
+  | NoteDirective
+  | DocumentDirective
+  | PadDirective
+  | QueryDirective
+  | CustomDirective;
+
+interface DocumentSymbol {
+  name: string;
+  kind: string;
+  detail?: string;
+  range: {
+    start_line: number;
+    end_line: number;
+    start_character: number;
+    end_character: number;
+  };
+}
+
 const server = new Server(
   {
     name: "rustledger",
@@ -776,30 +895,27 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           error_count: ledger.getErrors().length,
         };
 
-        for (const d of directives) {
-          const directive = d as { type: string; date: string; account?: string; currency?: string; postings?: Array<{ account: string; units?: { currency: string } }> };
-          if (!stats.date_range.first || directive.date < stats.date_range.first) {
-            stats.date_range.first = directive.date;
+        for (const d of directives as Directive[]) {
+          if (!stats.date_range.first || d.date < stats.date_range.first) {
+            stats.date_range.first = d.date;
           }
-          if (!stats.date_range.last || directive.date > stats.date_range.last) {
-            stats.date_range.last = directive.date;
+          if (!stats.date_range.last || d.date > stats.date_range.last) {
+            stats.date_range.last = d.date;
           }
 
-          switch (directive.type) {
+          switch (d.type) {
             case "transaction":
               stats.transactions++;
-              if (directive.postings) {
-                for (const p of directive.postings) {
-                  stats.unique_accounts.add(p.account);
-                  if (p.units?.currency) {
-                    stats.unique_currencies.add(p.units.currency);
-                  }
+              for (const p of d.postings) {
+                stats.unique_accounts.add(p.account);
+                if (p.units?.currency) {
+                  stats.unique_currencies.add(p.units.currency);
                 }
               }
               break;
             case "open":
               stats.open_accounts++;
-              if (directive.account) stats.unique_accounts.add(directive.account);
+              stats.unique_accounts.add(d.account);
               break;
             case "close":
               stats.close_accounts++;
@@ -809,7 +925,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               break;
             case "commodity":
               stats.commodities++;
-              if (directive.currency) stats.unique_currencies.add(directive.currency);
+              stats.unique_currencies.add(d.currency);
               break;
             case "price":
               stats.prices++;
@@ -867,19 +983,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const accounts: Record<string, { open_date?: string; close_date?: string; currencies: string[]; booking?: string }> = {};
 
-        for (const d of directives) {
-          const directive = d as { type: string; date: string; account?: string; currencies?: string[]; booking?: string };
-          if (directive.type === "open" && directive.account) {
-            accounts[directive.account] = {
-              open_date: directive.date,
-              currencies: directive.currencies || [],
-              booking: directive.booking,
+        for (const d of directives as Directive[]) {
+          if (d.type === "open") {
+            accounts[d.account] = {
+              open_date: d.date,
+              currencies: d.currencies || [],
+              booking: d.booking,
             };
-          } else if (directive.type === "close" && directive.account) {
-            if (accounts[directive.account]) {
-              accounts[directive.account].close_date = directive.date;
+          } else if (d.type === "close") {
+            if (accounts[d.account]) {
+              accounts[d.account].close_date = d.date;
             } else {
-              accounts[directive.account] = { close_date: directive.date, currencies: [] };
+              accounts[d.account] = { close_date: d.date, currencies: [] };
             }
           }
         }
@@ -904,17 +1019,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const commodities = new Set<string>();
 
-        for (const d of directives) {
-          const directive = d as { type: string; currency?: string; amount?: { currency: string }; postings?: Array<{ units?: { currency: string } }> };
-          if (directive.type === "commodity" && directive.currency) {
-            commodities.add(directive.currency);
-          } else if (directive.type === "price" && directive.currency) {
-            commodities.add(directive.currency);
-            if (directive.amount?.currency) {
-              commodities.add(directive.amount.currency);
-            }
-          } else if (directive.type === "transaction" && directive.postings) {
-            for (const p of directive.postings) {
+        for (const d of directives as Directive[]) {
+          if (d.type === "commodity") {
+            commodities.add(d.currency);
+          } else if (d.type === "price") {
+            commodities.add(d.currency);
+            commodities.add(d.amount.currency);
+          } else if (d.type === "transaction") {
+            for (const p of d.postings) {
               if (p.units?.currency) {
                 commodities.add(p.units.currency);
               }
@@ -951,21 +1063,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           currencies_used: new Set<string>(),
         };
 
-        for (const d of directives) {
-          const directive = d as { type: string; date: string; account?: string; postings?: Array<{ account: string; units?: { currency: string } }> };
-          if (directive.type === "open" && directive.account === account) {
-            activity.open_date = directive.date;
-          } else if (directive.type === "close" && directive.account === account) {
-            activity.close_date = directive.date;
-          } else if (directive.type === "transaction" && directive.postings) {
-            for (const p of directive.postings) {
+        for (const d of directives as Directive[]) {
+          if (d.type === "open" && d.account === account) {
+            activity.open_date = d.date;
+          } else if (d.type === "close" && d.account === account) {
+            activity.close_date = d.date;
+          } else if (d.type === "transaction") {
+            for (const p of d.postings) {
               if (p.account === account || p.account.startsWith(account + ":")) {
                 activity.transaction_count++;
-                if (!activity.first_transaction || directive.date < activity.first_transaction) {
-                  activity.first_transaction = directive.date;
+                if (!activity.first_transaction || d.date < activity.first_transaction) {
+                  activity.first_transaction = d.date;
                 }
-                if (!activity.last_transaction || directive.date > activity.last_transaction) {
-                  activity.last_transaction = directive.date;
+                if (!activity.last_transaction || d.date > activity.last_transaction) {
+                  activity.last_transaction = d.date;
                 }
                 if (p.units?.currency) {
                   activity.currencies_used.add(p.units.currency);
@@ -1034,9 +1145,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ledger.free();
 
         // Find the symbol that contains this line
-        for (const symbol of symbols) {
-          const s = symbol as { range: { start_line: number; end_line: number }; name: string; kind: string; detail?: string };
-          if (s.range.start_line <= line - 1 && s.range.end_line >= line - 1) {
+        for (const symbol of symbols as DocumentSymbol[]) {
+          if (symbol.range.start_line <= line - 1 && symbol.range.end_line >= line - 1) {
             return {
               content: [{ type: "text", text: JSON.stringify(symbol, null, 2) }],
             };
@@ -1069,17 +1179,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         const results: unknown[] = [];
 
-        for (const d of directives) {
+        for (const d of directives as Directive[]) {
           if (results.length >= limit) break;
+          if (d.type !== "transaction") continue;
 
-          const directive = d as { type: string; date: string; payee?: string; narration?: string; tags?: string[] };
-          if (directive.type !== "transaction") continue;
-
-          if (fromDate && directive.date < fromDate) continue;
-          if (toDate && directive.date > toDate) continue;
-          if (payee && (!directive.payee || !directive.payee.toLowerCase().includes(payee.toLowerCase()))) continue;
-          if (narration && (!directive.narration || !directive.narration.toLowerCase().includes(narration.toLowerCase()))) continue;
-          if (tag && (!directive.tags || !directive.tags.includes(tag))) continue;
+          if (fromDate && d.date < fromDate) continue;
+          if (toDate && d.date > toDate) continue;
+          if (payee && (!d.payee || !d.payee.toLowerCase().includes(payee.toLowerCase()))) continue;
+          if (narration && (!d.narration || !d.narration.toLowerCase().includes(narration.toLowerCase()))) continue;
+          if (tag && (!d.tags || !d.tags.includes(tag))) continue;
 
           results.push(d);
         }
