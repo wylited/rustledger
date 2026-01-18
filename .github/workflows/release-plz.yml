@@ -57,9 +57,10 @@ jobs:
           VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
           echo "Syncing npm packages to version $VERSION"
 
-          # Update MCP server package.json version
+          # Update MCP server package.json (version and @rustledger/wasm dependency)
           if [ -f "packages/mcp-server/package.json" ]; then
             sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" packages/mcp-server/package.json
+            sed -i "s/\"@rustledger\/wasm\": \"\\^[^\"]*\"/\"@rustledger\/wasm\": \"^$VERSION\"/" packages/mcp-server/package.json
             echo "Updated packages/mcp-server/package.json"
           fi
 
@@ -70,8 +71,8 @@ jobs:
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add packages/
-            git commit --amend --no-edit
-            git push --force-with-lease
+            git commit -m "chore: sync npm package versions to $VERSION"
+            git push
             echo "npm package versions synced"
           fi
 

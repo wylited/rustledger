@@ -30,7 +30,7 @@
   "homepage": "https://rustledger.github.io",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@rustledger/wasm": "latest"
+    "@rustledger/wasm": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

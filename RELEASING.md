@@ -161,7 +161,7 @@ If automation fails, you can still release manually:
 cargo set-version 0.5.0 --workspace
 
 # Update npm packages
-sed -i 's/"version": "[^"]*"/"version": "0.5.0"/' packages/mcp-server/package.json
+sed -i 's/\"version\": \"[^\"]*\"/\"version\": \"0.5.0\"/' packages/mcp-server/package.json
 
 # Commit and tag
 git add -A
