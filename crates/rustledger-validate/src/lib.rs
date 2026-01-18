@@ -20,6 +20,7 @@
 //! | E1004 | Account close with non-zero balance |
 //! | E1005 | Invalid account name |
 //! | E2001 | Balance assertion failed |
+//! | E2002 | Balance exceeds explicit tolerance |
 //! | E2003 | Pad without subsequent balance |
 //! | E2004 | Multiple pads for same balance |
 //! | E3001 | Transaction does not balance |
