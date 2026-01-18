@@ -399,6 +399,38 @@ describe('Tool Handlers', () => {
     });
   });
 
+  describe('editor_references', () => {
+    it('should find account references', () => {
+      const result = handleToolCall('editor_references', {
+        source: SAMPLE_LEDGER,
+        line: 5, // Line with Assets:Checking in a posting
+        character: 2,
+      });
+      expect(result.isError).toBeFalsy();
+      // Either finds references or returns "No references found"
+      expect(result.content[0].text).toBeDefined();
+    });
+
+    it('should find currency references', () => {
+      const result = handleToolCall('editor_references', {
+        source: SAMPLE_LEDGER,
+        line: 5, // Line with USD
+        character: 22,
+      });
+      expect(result.isError).toBeFalsy();
+    });
+
+    it('should handle positions without references', () => {
+      const result = handleToolCall('editor_references', {
+        source: SAMPLE_LEDGER,
+        line: 0, // Empty line
+        character: 0,
+      });
+      expect(result.isError).toBeFalsy();
+      expect(result.content[0].text).toContain('No references found');
+    });
+  });
+
   describe('ledger_stats', () => {
     it('should return ledger statistics', () => {
       const result = handleToolCall('ledger_stats', { source: SAMPLE_LEDGER });
@@ -555,8 +587,8 @@ describe('Tool Handlers', () => {
 // ============================================================================
 
 describe('Tool Definitions', () => {
-  it('should have 24 tools defined', () => {
-    expect(TOOLS.length).toBe(24);
+  it('should have 25 tools defined', () => {
+    expect(TOOLS.length).toBe(25);
   });
 
   it('all tools should have required fields', () => {

@@ -237,6 +237,30 @@ export const editorDocumentSymbolsTool: ToolDefinition = {
   },
 };
 
+export const editorReferencesTool: ToolDefinition = {
+  name: "editor_references",
+  description:
+    "Find all references to a symbol (account, currency, or payee) at the given position. Returns all locations where the symbol is used.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      source: {
+        type: "string",
+        description: "The Beancount ledger source text",
+      },
+      line: {
+        type: "number",
+        description: "Line number (0-indexed)",
+      },
+      character: {
+        type: "number",
+        description: "Character position in the line (0-indexed)",
+      },
+    },
+    required: ["source", "line", "character"],
+  },
+};
+
 // === Analysis Tools ===
 
 export const ledgerStatsTool: ToolDefinition = {
@@ -494,6 +518,7 @@ export const TOOLS: ToolDefinition[] = [
   editorHoverTool,
   editorDefinitionTool,
   editorDocumentSymbolsTool,
+  editorReferencesTool,
   // Analysis Tools
   ledgerStatsTool,
   listAccountsTool,

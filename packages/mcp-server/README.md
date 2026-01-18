@@ -69,8 +69,7 @@ Add to your Claude Code settings:
 | `editor_hover` | Get hover information for symbols |
 | `editor_definition` | Go to definition for accounts/currencies |
 | `editor_document_symbols` | Get document outline/structure |
-
-> **Note:** `editor_references` (find all references) is not yet available. This requires additional WASM bindings.
+| `editor_references` | Find all references to accounts/currencies/payees |
 
 ### Analysis Tools
 

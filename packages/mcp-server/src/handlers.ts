@@ -54,6 +54,8 @@ export function handleToolCall(
       return handleEditorDefinition(args);
     case "editor_document_symbols":
       return handleEditorDocumentSymbols(args);
+    case "editor_references":
+      return handleEditorReferences(args);
 
     // === Analysis Tools ===
     case "ledger_stats":
@@ -222,6 +224,20 @@ function handleEditorDocumentSymbols(args: ToolArguments | undefined): ToolRespo
   const ledger = new rustledger.ParsedLedger(args!.source!);
   const result = ledger.getDocumentSymbols();
   ledger.free();
+  return jsonResponse(result);
+}
+
+function handleEditorReferences(args: ToolArguments | undefined): ToolResponse {
+  const validation = validateArgs(args, ["source", "line", "character"]);
+  if (validation) return validation;
+
+  const ledger = new rustledger.ParsedLedger(args!.source!);
+  const result = ledger.getReferences(args!.line!, args!.character!);
+  ledger.free();
+
+  if (!result) {
+    return textResponse("No references found at this position.");
+  }
   return jsonResponse(result);
 }
 

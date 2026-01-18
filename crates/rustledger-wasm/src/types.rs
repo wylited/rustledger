@@ -476,3 +476,44 @@ pub enum SymbolKind {
     /// A custom directive.
     Custom,
 }
+
+// =============================================================================
+// References Types
+// =============================================================================
+
+/// The kind of symbol being referenced.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ReferenceKind {
+    /// An account reference.
+    Account,
+    /// A currency/commodity reference.
+    Currency,
+    /// A payee reference.
+    Payee,
+}
+
+/// A reference to a symbol in the document.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorReference {
+    /// The range of this reference.
+    pub range: EditorRange,
+    /// The kind of reference.
+    pub kind: ReferenceKind,
+    /// Whether this is the defining occurrence.
+    pub is_definition: bool,
+    /// Human-readable context (e.g., directive type).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+/// Result of a find-references request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EditorReferencesResult {
+    /// The symbol being searched for.
+    pub symbol: String,
+    /// The kind of symbol.
+    pub kind: ReferenceKind,
+    /// All references found.
+    pub references: Vec<EditorReference>,
+}

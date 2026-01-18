@@ -8,7 +8,8 @@ use rustledger_parser::ParseResult;
 
 use crate::types::{
     CompletionKind, EditorCompletion, EditorCompletionResult, EditorDocumentSymbol,
-    EditorHoverInfo, EditorLocation, EditorRange, SymbolKind,
+    EditorHoverInfo, EditorLocation, EditorRange, EditorReference, EditorReferencesResult,
+    ReferenceKind, SymbolKind,
 };
 
 // =============================================================================
@@ -897,6 +898,381 @@ fn directive_to_symbol_cached(
             })
         }
     }
+}
+
+// =============================================================================
+// Find References
+// =============================================================================
+
+/// Find all references to the symbol at the given position (using cached data).
+pub fn get_references_cached(
+    source: &str,
+    line: u32,
+    character: u32,
+    parse_result: &ParseResult,
+    cache: &EditorCache,
+) -> Option<EditorReferencesResult> {
+    let word = get_word_at_position(source, line, character)?;
+
+    // Check if it's an account name
+    if word.contains(':') || is_account_type(&word) {
+        return Some(find_account_references(
+            &word,
+            source,
+            parse_result,
+            &cache.line_index,
+        ));
+    }
+
+    // Check if it's a currency
+    if is_currency_like(&word) && cache.currencies.contains(&word) {
+        return Some(find_currency_references(
+            &word,
+            source,
+            parse_result,
+            &cache.line_index,
+        ));
+    }
+
+    // Check if it's a payee (inside quotes on a transaction line)
+    if cache.payees.contains(&word) {
+        return Some(find_payee_references(
+            &word,
+            parse_result,
+            &cache.line_index,
+        ));
+    }
+
+    None
+}
+
+/// Find all references to an account.
+fn find_account_references(
+    account: &str,
+    source: &str,
+    parse_result: &ParseResult,
+    line_index: &LineIndex,
+) -> EditorReferencesResult {
+    let mut references = Vec::new();
+
+    for spanned_directive in &parse_result.directives {
+        let (start_line, _) = line_index.offset_to_position(spanned_directive.span.start);
+        let directive_line = get_line(source, start_line as usize);
+
+        match &spanned_directive.value {
+            Directive::Open(open) => {
+                let open_account = open.account.to_string();
+                if open_account == account || account.starts_with(&format!("{open_account}:")) {
+                    if let Some(range) =
+                        find_word_in_line(directive_line, &open_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: true,
+                            context: Some("open".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Close(close) => {
+                let close_account = close.account.to_string();
+                if close_account == account {
+                    if let Some(range) =
+                        find_word_in_line(directive_line, &close_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("close".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Balance(bal) => {
+                let bal_account = bal.account.to_string();
+                if bal_account == account {
+                    if let Some(range) = find_word_in_line(directive_line, &bal_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("balance".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Pad(pad) => {
+                let pad_account = pad.account.to_string();
+                let source_account = pad.source_account.to_string();
+                if pad_account == account {
+                    if let Some(range) = find_word_in_line(directive_line, &pad_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("pad".to_string()),
+                        });
+                    }
+                }
+                if source_account == account {
+                    if let Some(range) =
+                        find_word_in_line(directive_line, &source_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("pad source".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Note(note) => {
+                let note_account = note.account.to_string();
+                if note_account == account {
+                    if let Some(range) =
+                        find_word_in_line(directive_line, &note_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("note".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Document(doc) => {
+                let doc_account = doc.account.to_string();
+                if doc_account == account {
+                    if let Some(range) = find_word_in_line(directive_line, &doc_account, start_line)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Account,
+                            is_definition: false,
+                            context: Some("document".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Transaction(txn) => {
+                // Check postings - they're on subsequent lines
+                for (i, posting) in txn.postings.iter().enumerate() {
+                    let posting_account = posting.account.to_string();
+                    if posting_account == account {
+                        let posting_line = start_line + 1 + i as u32;
+                        if let Some(line_text) = source.lines().nth(posting_line as usize) {
+                            if let Some(range) =
+                                find_word_in_line(line_text, &posting_account, posting_line)
+                            {
+                                references.push(EditorReference {
+                                    range,
+                                    kind: ReferenceKind::Account,
+                                    is_definition: false,
+                                    context: Some("posting".to_string()),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    EditorReferencesResult {
+        symbol: account.to_string(),
+        kind: ReferenceKind::Account,
+        references,
+    }
+}
+
+/// Find all references to a currency.
+fn find_currency_references(
+    currency: &str,
+    source: &str,
+    parse_result: &ParseResult,
+    line_index: &LineIndex,
+) -> EditorReferencesResult {
+    let mut references = Vec::new();
+
+    for spanned_directive in &parse_result.directives {
+        let (start_line, _) = line_index.offset_to_position(spanned_directive.span.start);
+        let directive_line = get_line(source, start_line as usize);
+
+        match &spanned_directive.value {
+            Directive::Commodity(comm) => {
+                if comm.currency.as_ref() == currency {
+                    if let Some(range) = find_word_in_line(directive_line, currency, start_line) {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Currency,
+                            is_definition: true,
+                            context: Some("commodity".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Open(open) => {
+                for curr in &open.currencies {
+                    if curr.as_ref() == currency {
+                        if let Some(range) = find_word_in_line(directive_line, currency, start_line)
+                        {
+                            references.push(EditorReference {
+                                range,
+                                kind: ReferenceKind::Currency,
+                                is_definition: false,
+                                context: Some("open".to_string()),
+                            });
+                        }
+                    }
+                }
+            }
+            Directive::Balance(bal) => {
+                if bal.amount.currency.as_ref() == currency {
+                    if let Some(range) = find_word_in_line(directive_line, currency, start_line) {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Currency,
+                            is_definition: false,
+                            context: Some("balance".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Price(price) => {
+                if price.currency.as_ref() == currency {
+                    if let Some(range) = find_word_in_line(directive_line, currency, start_line) {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Currency,
+                            is_definition: false,
+                            context: Some("price".to_string()),
+                        });
+                    }
+                }
+                if price.amount.currency.as_ref() == currency {
+                    // Find second occurrence
+                    if let Some(range) =
+                        find_nth_word_in_line(directive_line, currency, start_line, 1)
+                    {
+                        references.push(EditorReference {
+                            range,
+                            kind: ReferenceKind::Currency,
+                            is_definition: false,
+                            context: Some("price amount".to_string()),
+                        });
+                    }
+                }
+            }
+            Directive::Transaction(txn) => {
+                for (i, posting) in txn.postings.iter().enumerate() {
+                    if let Some(ref units) = posting.units {
+                        if let Some(curr) = units.currency() {
+                            if curr == currency {
+                                let posting_line = start_line + 1 + i as u32;
+                                if let Some(line_text) = source.lines().nth(posting_line as usize) {
+                                    if let Some(range) =
+                                        find_word_in_line(line_text, currency, posting_line)
+                                    {
+                                        references.push(EditorReference {
+                                            range,
+                                            kind: ReferenceKind::Currency,
+                                            is_definition: false,
+                                            context: Some("posting".to_string()),
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    EditorReferencesResult {
+        symbol: currency.to_string(),
+        kind: ReferenceKind::Currency,
+        references,
+    }
+}
+
+/// Find all references to a payee.
+fn find_payee_references(
+    payee: &str,
+    parse_result: &ParseResult,
+    line_index: &LineIndex,
+) -> EditorReferencesResult {
+    let mut references = Vec::new();
+
+    for spanned_directive in &parse_result.directives {
+        if let Directive::Transaction(txn) = &spanned_directive.value {
+            if let Some(ref txn_payee) = txn.payee {
+                if txn_payee == payee {
+                    let (start_line, _) =
+                        line_index.offset_to_position(spanned_directive.span.start);
+                    // Payee is quoted, find it in the line
+                    references.push(EditorReference {
+                        range: EditorRange {
+                            start_line,
+                            start_character: 0,
+                            end_line: start_line,
+                            end_character: 100, // Approximate
+                        },
+                        kind: ReferenceKind::Payee,
+                        is_definition: references.is_empty(), // First occurrence is "definition"
+                        context: Some("transaction".to_string()),
+                    });
+                }
+            }
+        }
+    }
+
+    EditorReferencesResult {
+        symbol: payee.to_string(),
+        kind: ReferenceKind::Payee,
+        references,
+    }
+}
+
+/// Find a word in a line and return its range.
+fn find_word_in_line(line: &str, word: &str, line_num: u32) -> Option<EditorRange> {
+    find_nth_word_in_line(line, word, line_num, 0)
+}
+
+/// Find the nth occurrence of a word in a line and return its range.
+fn find_nth_word_in_line(line: &str, word: &str, line_num: u32, n: usize) -> Option<EditorRange> {
+    let mut count = 0;
+    let mut start = 0;
+
+    while let Some(pos) = line[start..].find(word) {
+        let abs_pos = start + pos;
+        // Check word boundaries
+        let before_ok = abs_pos == 0 || !is_word_char(line.chars().nth(abs_pos - 1)?);
+        let after_ok = abs_pos + word.len() >= line.len()
+            || !is_word_char(line.chars().nth(abs_pos + word.len())?);
+
+        if before_ok && after_ok {
+            if count == n {
+                return Some(EditorRange {
+                    start_line: line_num,
+                    start_character: abs_pos as u32,
+                    end_line: line_num,
+                    end_character: (abs_pos + word.len()) as u32,
+                });
+            }
+            count += 1;
+        }
+        start = abs_pos + 1;
+    }
+    None
 }
 
 // =============================================================================
