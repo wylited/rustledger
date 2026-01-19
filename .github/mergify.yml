@@ -5,6 +5,15 @@
 # Requires Mergify GitHub App: https://github.com/apps/mergify
 
 pull_request_rules:
+  # Auto-assign all PRs to maintainer
+  - name: Auto-assign PRs
+    conditions:
+      - -draft
+    actions:
+      assign:
+        users:
+          - robcohen
+
   # Auto-merge Dependabot PRs (dependency updates)
   - name: Auto-merge Dependabot PRs
     conditions:
