@@ -1,0 +1,47 @@
+# Auto-update cargo-vet exemptions for Dependabot PRs
+# This prevents cargo-deny check failures when Dependabot updates dependencies
+name: Cargo Vet Auto
+
+on:
+  pull_request:
+    paths:
+      - 'Cargo.lock'
+
+permissions:
+  contents: write
+
+jobs:
+  update-exemptions:
+    name: Update Exemptions
+    runs-on: ubuntu-latest
+    # Only run for Dependabot PRs
+    if: github.actor == 'dependabot[bot]'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
+          # Need PAT to push changes back to the PR branch
+          token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-vet
+        uses: taiki-e/install-action@cargo-vet
+
+      - name: Regenerate exemptions
+        run: cargo vet regenerate exemptions
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add supply-chain/
+          if git diff --staged --quiet; then
+            echo "No exemption changes needed"
+          else
+            git commit -m "chore: regenerate cargo-vet exemptions"
+            git push
+            echo "Exemptions updated and pushed"
+          fi
