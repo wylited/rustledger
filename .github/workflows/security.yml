@@ -18,9 +18,12 @@ permissions:
 
 jobs:
   # Secret scanning with gitleaks
+  # Skips for Dependabot PRs (no access to GITLEAKS_LICENSE secret)
   gitleaks:
     name: Gitleaks Secret Scan
     runs-on: ubuntu-latest
+    # Skip for Dependabot - it only updates dependencies, not code with secrets
+    if: github.actor != 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v4
         with:
