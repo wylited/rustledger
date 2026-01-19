@@ -213,17 +213,17 @@ pub enum Token<'src> {
 
     /// A comment starting with semicolon.
     /// The slice includes the semicolon.
-    #[regex(r";[^\n\r]*")]
+    #[regex(r";[^\n\r]*", allow_greedy = true)]
     Comment(&'src str),
 
     /// Shebang line at start of file (e.g., #!/usr/bin/env bean-web).
     /// Treated as a comment-like directive to skip.
-    #[regex(r"#![^\n\r]*")]
+    #[regex(r"#![^\n\r]*", allow_greedy = true)]
     Shebang(&'src str),
 
     /// Emacs org-mode directive (e.g., "#+STARTUP: showall").
     /// These are Emacs configuration lines that should be skipped.
-    #[regex(r"#\+[^\n\r]*")]
+    #[regex(r"#\+[^\n\r]*", allow_greedy = true)]
     EmacsDirective(&'src str),
 
     /// A metadata key (identifier followed by colon).

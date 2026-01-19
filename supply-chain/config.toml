@@ -621,12 +621,24 @@ criteria = "safe-to-deploy"
 version = "0.15.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.logos]]
+version = "0.16.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.logos-codegen]]
 version = "0.15.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.logos-codegen]]
+version = "0.16.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.logos-derive]]
 version = "0.15.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.logos-derive]]
+version = "0.16.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.logosky]]
@@ -1141,20 +1153,12 @@ criteria = "safe-to-deploy"
 version = "2.0.17"
 criteria = "safe-to-deploy"
 
-[[exemptions.thiserror]]
-version = "2.0.18"
-criteria = "safe-to-deploy"
-
 [[exemptions.thiserror-impl]]
 version = "1.0.69"
 criteria = "safe-to-deploy"
 
 [[exemptions.thiserror-impl]]
 version = "2.0.17"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror-impl]]
-version = "2.0.18"
 criteria = "safe-to-deploy"
 
 [[exemptions.thread_local]]
