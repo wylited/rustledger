@@ -62,7 +62,7 @@ jobs:
           PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head_branch // empty' 2>/dev/null || echo "")
           if [ -n "$PR_BRANCH" ]; then
             echo "Triggering CI for branch: $PR_BRANCH"
-            gh workflow run ci.yml --ref "$PR_BRANCH" || echo "CI trigger failed (may already be running)"
+            gh workflow run ci.yml --ref "$PR_BRANCH" || echo "CI trigger failed (workflow may already be running or other error occurred)"
           else
             echo "Could not extract branch name from PR output"
           fi
@@ -77,7 +77,7 @@ jobs:
           PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty' 2>/dev/null || echo "")
           if [ -n "$PR_NUMBER" ]; then
             echo "Enabling auto-merge for PR #$PR_NUMBER"
-            gh pr merge "$PR_NUMBER" --auto --merge || echo "Auto-merge setup failed (may need approval first)"
+            gh pr merge "$PR_NUMBER" --auto --merge || echo "Auto-merge setup failed (may need approval, branch protection, or permissions)"
           else
             echo "Could not extract PR number from output"
           fi
