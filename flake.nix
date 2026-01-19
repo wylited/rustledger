@@ -446,15 +446,16 @@
               echo ""
 
               # OpenCode container alias (requires sops-nix secrets)
-              # Uses a named volume for /nix to cache downloads between runs
-              # The 'copy' option preserves the container's base nix content on first run
+              # Uses overlayfs to combine container's nix store with host's store
+              # Writes go to ephemeral tmpfs (secure - no persistence between runs)
               if [[ -f /run/secrets/api/together-ai && \
                     -f /run/secrets/user/email && \
                     -f /run/secrets/user/realName ]]; then
                 alias opencode-container='podman run \
                     -v $(pwd):/data:Z \
                     -v ~/.opencode:/home/nixuser/.opencode \
-                    --mount type=volume,src=opencode-nix,dst=/nix,U=true \
+                    -v /nix/store:/host-nix-store:ro \
+                    --cap-add=SYS_ADMIN \
                     --userns=keep-id \
                     --rm -ti \
                     -w /data \
@@ -464,7 +465,7 @@
                     -e GIT_COMMITTER_NAME="$(cat /run/secrets/user/realName)" \
                     -e GIT_COMMITTER_EMAIL="$(cat /run/secrets/user/email)" \
                     ghcr.io/grigio/docker-nixuser:latest \
-                    sh -c "nix profile install nixpkgs#opencode && opencode"'
+                    sh -c "mkdir -p /tmp/nix-upper /tmp/nix-work && mount -t overlay overlay -o lowerdir=/nix/store:/host-nix-store,upperdir=/tmp/nix-upper,workdir=/tmp/nix-work /nix/store && opencode"'
               else
                 alias opencode-container='echo "Missing sops-nix secrets. Required: api/together-ai, user/email, user/realName"'
               fi
