@@ -1,0 +1,37 @@
+# Gitleaks configuration
+# https://github.com/gitleaks/gitleaks
+
+title = "rustledger gitleaks config"
+
+[extend]
+# Use the default gitleaks config as base
+useDefault = true
+
+# Paths to ignore (test fixtures, examples, etc.)
+[allowlist]
+paths = [
+  '''spec/fixtures/.*''',
+  '''testdata/.*''',
+  '''\.github/workflows/.*\.yml''',  # Workflow files may have token placeholders
+]
+
+# Regex patterns to ignore (false positives)
+regexes = [
+  '''EXAMPLE_.*''',
+  '''example[-_]?key''',
+  '''test[-_]?token''',
+]
+
+# Specific rules to customize
+[[rules]]
+id = "generic-api-key"
+description = "Generic API Key"
+regex = '''(?i)(?:api[_-]?key|apikey)\s*[:=]\s*['"]?([a-zA-Z0-9_-]{20,})['"]?'''
+secretGroup = 1
+entropy = 3.5
+keywords = ["api_key", "apikey", "api-key"]
+
+# Allow certain commits (e.g., if secrets were already rotated)
+[allowlist.commits]
+# Add commit hashes here if needed
+# "abc123" = "Reason for allowing"

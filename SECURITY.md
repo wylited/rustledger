@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.3.x   | Yes |
-| < 0.3   | No |
+| 0.4.x   | Yes |
+| < 0.4   | No |
 
 Only the latest minor version receives security fixes.
 
@@ -27,12 +27,18 @@ Or [contact us directly](https://rustledger.github.io/#contact).
 - Steps to reproduce
 - Affected versions
 - Potential impact
+- Suggested fix (optional)
 
 ## What to Expect
 
-- **Response:** Within 7 days
-- **Fix timeline:** Depends on severity, typically 30-90 days
-- **Credit:** We'll credit you in the release notes (unless you prefer anonymity)
+| Severity | Response | Fix Timeline |
+|----------|----------|--------------|
+| Critical | 24 hours | 24-72 hours |
+| High     | 48 hours | 7 days |
+| Medium   | 7 days   | 30 days |
+| Low      | 14 days  | 90 days |
+
+We'll credit you in the release notes (unless you prefer anonymity).
 
 ## Scope
 
@@ -43,9 +49,42 @@ Security issues we care about:
 - Denial of service (e.g., parser hangs on malformed input)
 - Memory safety issues
 - Credential/secret exposure
+- Supply chain attacks
 
 Out of scope:
 
 - Issues requiring physical access
 - Social engineering
 - Vulnerabilities in dependencies (report upstream, but let us know)
+
+## Security Measures
+
+### Pre-commit Hooks
+- `detect-private-keys` - Blocks commits containing private keys
+- `gitleaks` - Comprehensive secret scanning with pattern matching
+
+### CI/CD Security
+- `cargo-deny` - RustSec advisory database, license compliance, dependency bans
+- `gitleaks-action` - Backup secret scanning in CI
+- `dependency-review` - Checks PRs for vulnerable dependencies
+- SBOM generation - CycloneDX format for supply chain transparency
+
+### Code Quality
+- `clippy` - Strict linting with `-D warnings`
+- `rustfmt` - Consistent code formatting
+- Required code review for all changes
+
+### GitHub Security Features
+- Secret scanning enabled
+- Dependabot alerts and updates
+- Branch protection on `main`
+
+## Safe Harbor
+
+We consider security research conducted in good faith to be authorized. We will not pursue legal action against researchers who:
+
+- Act in good faith
+- Avoid privacy violations
+- Avoid data destruction
+- Do not exploit issues beyond verification
+- Report findings promptly

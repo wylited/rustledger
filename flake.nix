@@ -229,8 +229,17 @@
               # Nix
               nil.enable = true;
 
-              # Secrets detection
+              # Secrets detection (defense in depth)
               detect-private-keys.enable = true;
+
+              # Comprehensive secret scanning with gitleaks
+              gitleaks = {
+                enable = true;
+                name = "gitleaks";
+                entry = "${pkgs.gitleaks}/bin/gitleaks detect --source . --redact --no-git --config .gitleaks.toml";
+                language = "system";
+                pass_filenames = false;
+              };
 
               # Commit message
               commitizen.enable = true;
