@@ -19,15 +19,15 @@ changelog_update = true
 git_tag_enable = true
 git_tag_name = "v{{ version }}"
 
-# Create GitHub releases
-git_release_enable = true
-git_release_name = "v{{ version }}"
+# Don't create GitHub releases here - release-build.yml handles this
+# (it attaches binary artifacts to the release)
+git_release_enable = false
 
 # PR settings
 pr_draft = false
 pr_labels = ["release"]
 
-# Don't publish to crates.io from release-plz (handled by release-publish.yml)
+# Don't publish to crates.io from release-plz (handled by release-build.yml)
 publish = false
 
 # Allow releasing from main

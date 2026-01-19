@@ -50,6 +50,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Trigger CI workflow for the release PR
+      # (GITHUB_TOKEN can't automatically trigger other workflows)
+      - name: Trigger CI for release PR
+        if: steps.release-plz.outputs.pr_created == 'true' || steps.release-plz.outputs.pr_updated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_DATA: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          echo "PR output: $PR_DATA"
+          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head_branch // empty' 2>/dev/null || echo "")
+          if [ -n "$PR_BRANCH" ]; then
+            echo "Triggering CI for branch: $PR_BRANCH"
+            gh workflow run ci.yml --ref "$PR_BRANCH" || echo "CI trigger failed (workflow may already be running or other error occurred)"
+          else
+            echo "Could not extract branch name from PR output"
+          fi
+
+      # Enable auto-merge for release PRs (will merge when checks pass and approved)
+      - name: Enable auto-merge for release PR
+        if: steps.release-plz.outputs.pr_created == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_DATA: ${{ steps.release-plz.outputs.pr }}
+        run: |
+          PR_NUMBER=$(echo "$PR_DATA" | jq -r '.number // empty' 2>/dev/null || echo "")
+          if [ -n "$PR_NUMBER" ]; then
+            echo "Enabling auto-merge for PR #$PR_NUMBER"
+            gh pr merge "$PR_NUMBER" --auto --merge || echo "Auto-merge setup failed (may need approval, branch protection, or permissions)"
+          else
+            echo "Could not extract PR number from output"
+          fi
+
       - name: Sync npm package versions
         if: steps.release-plz.outputs.pr_created == 'true' || steps.release-plz.outputs.pr_updated == 'true'
         run: |

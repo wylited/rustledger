@@ -247,7 +247,13 @@
                     exit 0
                   fi
 
-                  PATTERN="^(feature|fix|docs|chore|refactor|claude)/[a-zA-Z0-9][a-zA-Z0-9-]*$"
+                  # Allow release-plz branches (e.g., release-plz-2026-01-18T17-10-14Z)
+                  if [[ "$BRANCH" =~ ^release-plz- ]]; then
+                    echo "✅ Branch name '$BRANCH' is valid (release-plz)"
+                    exit 0
+                  fi
+
+                  PATTERN="^(feature|fix|docs|chore|refactor|release|hotfix|claude|dependabot|copilot)/[a-zA-Z0-9][a-zA-Z0-9/_-]*$"
 
                   if [[ "$BRANCH" =~ $PATTERN ]]; then
                     echo "✅ Branch name '$BRANCH' is valid"
@@ -256,8 +262,8 @@
                     echo "❌ Branch name '$BRANCH' does not match pattern"
                     echo ""
                     echo "Branch names must follow: <type>/<description>"
-                    echo "  Types: feature, fix, docs, chore, refactor, claude"
-                    echo "  Description: letters, numbers, hyphens (must start with letter/number)"
+                    echo "  Types: feature, fix, docs, chore, refactor, release, hotfix, claude, dependabot, copilot"
+                    echo "  Description: letters, numbers, hyphens, underscores, slashes"
                     echo ""
                     echo "Examples:"
                     echo "  feature/add-csv-export"
@@ -267,6 +273,37 @@
                     echo "Note: 'feat/' is NOT valid, use 'feature/' instead"
                     exit 1
                   fi
+                ''}";
+                language = "system";
+                stages = [ "pre-push" ];
+                pass_filenames = false;
+                always_run = true;
+              };
+
+              # Run tests before push to catch failures before CI
+              cargo-test = {
+                enable = true;
+                name = "cargo-test";
+                entry = "${pkgs.writeShellScript "cargo-test" ''
+                  echo "Running cargo test (library tests only for speed)..."
+                  cargo test --workspace --lib --quiet
+                ''}";
+                language = "system";
+                stages = [ "pre-push" ];
+                pass_filenames = false;
+                always_run = true;
+              };
+
+              # Check documentation builds without warnings
+              cargo-doc = {
+                enable = true;
+                name = "cargo-doc";
+                entry = "${pkgs.writeShellScript "cargo-doc" ''
+                  echo "Checking documentation..."
+                  RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --quiet 2>&1 | head -20 || {
+                    echo "Documentation has warnings. Run 'cargo doc' to see details."
+                    exit 1
+                  }
                 ''}";
                 language = "system";
                 stages = [ "pre-push" ];

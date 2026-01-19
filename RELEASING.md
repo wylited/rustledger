@@ -121,8 +121,8 @@ The release takes ~30-45 minutes to build all platforms.
 semver_check = true           # Use conventional commits for versioning
 changelog_update = true       # Generate changelog
 git_tag_enable = true         # Create git tags
-git_release_enable = true     # Create GitHub releases
-publish = false               # CI handles crates.io publishing
+git_release_enable = false    # release-build.yml handles GitHub releases
+publish = false               # release-build.yml handles crates.io publishing
 
 [changelog]
 commit_parsers = [...]        # Map commit types to changelog sections
@@ -133,8 +133,19 @@ commit_parsers = [...]        # Map commit types to changelog sections
 | File | Purpose |
 |------|---------|
 | `release-plz.yml` | Creates release PRs, syncs npm versions |
-| `release-build.yml` | Builds binaries, creates GitHub Release |
-| `release-publish.yml` | Distributes to package managers |
+| `release-build.yml` | Builds binaries, publishes to crates.io, creates GitHub Release |
+| `release-publish.yml` | Distributes to npm, Docker, Homebrew, Scoop, COPR |
+
+### Trusted Publishing
+
+Both crates.io and npm use OIDC trusted publishing - no API tokens required:
+
+- **crates.io**: Uses `rust-lang/crates-io-auth-action` for tokenless publishing
+- **npm**: Uses `--provenance` flag with OIDC
+
+### Mergify Auto-merge
+
+Release PRs from `release-plz` are automatically merged when CI passes (configured in `.github/mergify.yml`).
 
 ## Troubleshooting
 

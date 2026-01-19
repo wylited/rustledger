@@ -12,8 +12,8 @@
 #
 # SECRETS REQUIRED
 # ----------------
-# - CARGO_REGISTRY_TOKEN: crates.io publish
 # - WEBSITE_DISPATCH_TOKEN: PAT for creating release (triggers release-publish.yml)
+# - (crates.io uses OIDC trusted publishing, no token needed)
 #
 name: Release Build
 on:
@@ -28,6 +28,7 @@ on:
         type: string
 permissions:
   contents: write
+  id-token: write  # Required for crates.io trusted publishing (OIDC)
 env:
   CARGO_TERM_COLOR: always
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -360,9 +361,9 @@ jobs:
           ref: ${{ env.RELEASE_TAG }}
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+      - name: Authenticate with crates.io (trusted publishing)
+        uses: rust-lang/crates-io-auth-action@v1
       - name: Publish crates (in dependency order)
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           # Publish in dependency order with delay between each
           # to allow crates.io to index the previous crate

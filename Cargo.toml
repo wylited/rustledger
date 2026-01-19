@@ -1,4 +1,6 @@
 [workspace]
+# TODO: Upgrade to resolver = "3" when MSRV is bumped to 1.84+
+# Resolver 3 enables workspace-level multi-package publishing
 resolver = "2"
 members = [
   "crates/rustledger-core",
