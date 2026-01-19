@@ -37,7 +37,7 @@ mod snapshot;
 mod vfs;
 
 pub use main_loop::run_main_loop;
-pub use server::{start_stdio, Server};
+pub use server::{Server, start_stdio};
 pub use snapshot::Snapshot;
 pub use vfs::Vfs;
 

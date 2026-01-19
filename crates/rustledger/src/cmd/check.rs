@@ -6,15 +6,15 @@ use anyhow::{Context, Result};
 use chrono::NaiveDate;
 use clap::{Parser, ValueEnum};
 use rayon::prelude::*;
-use rustledger_booking::{interpolate, InterpolationError};
+use rustledger_booking::{InterpolationError, interpolate};
 use rustledger_core::Directive;
 use rustledger_loader::{
-    load_cache_entry, reintern_directives, save_cache_entry, CacheEntry, CachedOptions,
-    CachedPlugin, LoadError, LoadResult, Loader,
+    CacheEntry, CachedOptions, CachedPlugin, LoadError, LoadResult, Loader, load_cache_entry,
+    reintern_directives, save_cache_entry,
 };
 #[cfg(feature = "python-plugin-wasm")]
 use rustledger_plugin::PluginManager;
-use rustledger_plugin::{wrappers_to_directives, NativePluginRegistry, PluginInput, PluginOptions};
+use rustledger_plugin::{NativePluginRegistry, PluginInput, PluginOptions, wrappers_to_directives};
 use rustledger_validate::validate;
 use serde::Serialize;
 use std::io::{self, Write};

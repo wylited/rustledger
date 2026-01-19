@@ -757,7 +757,7 @@ fn cmd_display_context<W: Write>(file: &PathBuf, writer: &mut W) -> Result<()> {
 }
 
 fn cmd_roundtrip<W: Write>(file: &PathBuf, writer: &mut W) -> Result<()> {
-    use crate::format::{format_directive, FormatConfig};
+    use crate::format::{FormatConfig, format_directive};
 
     writeln!(writer, "Round-trip test for {}", file.display())?;
     writeln!(writer, "{}", "=".repeat(60))?;

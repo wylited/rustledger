@@ -3,7 +3,7 @@
 //! Tests cover all directive types, error recovery, edge cases, and real-world scenarios.
 
 use rustledger_core::Directive;
-use rustledger_parser::{parse, parse_directives, ParseResult};
+use rustledger_parser::{ParseResult, parse, parse_directives};
 
 // ============================================================================
 // Helper Functions

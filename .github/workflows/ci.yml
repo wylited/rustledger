@@ -96,13 +96,13 @@ jobs:
 
   # MSRV check - verify minimum supported Rust version (rust-version in Cargo.toml)
   msrv:
-    name: MSRV (1.75)
+    name: MSRV (1.85)
     runs-on: ubuntu-latest
     env:
       RUSTC_WRAPPER: ""  # Disable sccache for MSRV check
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.75
+      - uses: dtolnay/rust-toolchain@1.85
       - uses: Swatinem/rust-cache@v2
       - name: Check MSRV compatibility
         run: cargo check --workspace --all-features

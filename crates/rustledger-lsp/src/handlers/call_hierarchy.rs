@@ -147,11 +147,7 @@ pub fn handle_incoming_calls(
         }
     }
 
-    if calls.is_empty() {
-        None
-    } else {
-        Some(calls)
-    }
+    if calls.is_empty() { None } else { Some(calls) }
 }
 
 /// Handle outgoing calls request.

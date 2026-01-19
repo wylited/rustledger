@@ -4,7 +4,7 @@
 
 #![allow(missing_docs)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use rustledger_parser::logos_lexer::tokenize;
 use rustledger_parser::parse;

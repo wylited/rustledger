@@ -6,7 +6,7 @@
 //! Documents cache their parse results to avoid re-parsing on every request.
 
 use ropey::Rope;
-use rustledger_parser::{parse, ParseResult};
+use rustledger_parser::{ParseResult, parse};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;

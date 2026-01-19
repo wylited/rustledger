@@ -504,9 +504,11 @@ mod tests {
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::String(_))));
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Tag(_))));
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Newline)));
-        assert!(tokens
-            .iter()
-            .any(|(t, _)| matches!(t, Token::Indent(_) | Token::DeepIndent(_))));
+        assert!(
+            tokens
+                .iter()
+                .any(|(t, _)| matches!(t, Token::Indent(_) | Token::DeepIndent(_)))
+        );
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Account(_))));
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Number(_))));
         assert!(tokens.iter().any(|(t, _)| matches!(t, Token::Currency(_))));

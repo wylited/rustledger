@@ -8,7 +8,7 @@ use lsp_types::{Position, Range, SelectionRange, SelectionRangeParams};
 use rustledger_core::Directive;
 use rustledger_parser::ParseResult;
 
-use super::utils::{is_word_char, LineIndex};
+use super::utils::{LineIndex, is_word_char};
 
 /// Handle a selection range request.
 pub fn handle_selection_range(

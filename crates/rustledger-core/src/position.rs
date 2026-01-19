@@ -4,8 +4,8 @@
 //! optionally with an associated cost basis (lot). Positions with costs are used
 //! for tracking investments and calculating capital gains.
 
-use rust_decimal::prelude::Signed;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::Signed;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

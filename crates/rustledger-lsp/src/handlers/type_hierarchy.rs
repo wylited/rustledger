@@ -134,11 +134,7 @@ pub fn handle_subtypes(
         })
         .collect();
 
-    if items.is_empty() {
-        None
-    } else {
-        Some(items)
-    }
+    if items.is_empty() { None } else { Some(items) }
 }
 
 /// Get the parent account by removing the last segment.

@@ -48,11 +48,7 @@ pub fn handle_document_links(
         }
     }
 
-    if links.is_empty() {
-        None
-    } else {
-        Some(links)
-    }
+    if links.is_empty() { None } else { Some(links) }
 }
 
 /// Handle a document link resolve request.
@@ -104,7 +100,7 @@ pub fn handle_document_link_resolve(link: DocumentLink) -> DocumentLink {
 fn resolve_full_path(path: &str, base_dir: &Option<String>) -> Option<String> {
     if Path::new(path).is_absolute() {
         Some(path.to_string())
-    } else if let Some(ref base) = base_dir {
+    } else if let Some(base) = base_dir {
         let base_path = Path::new(base);
         Some(base_path.join(path).to_string_lossy().to_string())
     } else {

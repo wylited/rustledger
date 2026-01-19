@@ -11,10 +11,10 @@ use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 
+use crate::Amount;
 use crate::intern::InternedStr;
 #[cfg(feature = "rkyv")]
 use crate::intern::{AsDecimal, AsInternedStr, AsNaiveDate};
-use crate::Amount;
 
 /// A cost represents the acquisition cost of a position (lot).
 ///

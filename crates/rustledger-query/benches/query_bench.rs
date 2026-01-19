@@ -4,12 +4,12 @@
 
 #![allow(missing_docs)]
 
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 
 use chrono::NaiveDate;
 use rust_decimal_macros::dec;
 use rustledger_core::{Amount, Directive, Posting, Transaction};
-use rustledger_query::{parse as parse_query, Executor};
+use rustledger_query::{Executor, parse as parse_query};
 
 /// Generate sample directives for benchmarking.
 fn generate_directives(num_transactions: usize) -> Vec<Directive> {

@@ -469,9 +469,11 @@ mod tests {
         let result = process_pads(&directives);
 
         assert_eq!(result.errors.len(), 1);
-        assert!(result.errors[0]
-            .message
-            .contains("no corresponding balance"));
+        assert!(
+            result.errors[0]
+                .message
+                .contains("no corresponding balance")
+        );
     }
 
     #[test]

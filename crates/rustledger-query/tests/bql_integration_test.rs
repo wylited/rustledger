@@ -4,7 +4,7 @@
 
 use rust_decimal_macros::dec;
 use rustledger_core::{Amount, Directive, NaiveDate, Open, Posting, Transaction};
-use rustledger_query::{parse, Executor, QueryResult, Value};
+use rustledger_query::{Executor, QueryResult, Value, parse};
 
 // ============================================================================
 // Helper Functions

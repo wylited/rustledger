@@ -2,8 +2,8 @@
 //!
 //! Fills in missing posting amounts to balance transactions.
 
-use rust_decimal::prelude::Signed;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::Signed;
 use rustledger_core::{Amount, IncompleteAmount, InternedStr, Transaction};
 use std::collections::HashMap;
 use thiserror::Error;
@@ -235,8 +235,8 @@ pub fn interpolate(transaction: &Transaction) -> Result<InterpolationResult, Int
         // Get currencies with non-zero residuals
         let non_zero_residuals: Vec<(InternedStr, Decimal)> = residuals
             .iter()
-            .filter(|(_, &v)| !v.is_zero())
-            .map(|(k, &v)| (k.clone(), v))
+            .filter(|&(_, v)| !v.is_zero())
+            .map(|(k, v)| (k.clone(), *v))
             .collect();
 
         if unassigned_missing.len() > 1 && non_zero_residuals.len() > 1 {

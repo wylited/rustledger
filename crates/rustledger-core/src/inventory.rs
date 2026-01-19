@@ -4,8 +4,8 @@
 //! [`Position`]s. It provides methods for adding and reducing positions
 //! using different booking methods (FIFO, LIFO, STRICT, NONE).
 
-use rust_decimal::prelude::Signed;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::Signed;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;

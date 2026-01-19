@@ -7,7 +7,7 @@ use rust_decimal_macros::dec;
 use rustledger_core::{
     Amount, Balance, Close, Directive, NaiveDate, Open, Pad, Posting, PriceAnnotation, Transaction,
 };
-use rustledger_validate::{validate, ErrorCode};
+use rustledger_validate::{ErrorCode, validate};
 
 // ============================================================================
 // Helper Functions
@@ -413,7 +413,9 @@ fn test_basic_validation() {
     let errors = validate(&directives);
 
     // Should pass basic validation
-    assert!(!errors
-        .iter()
-        .any(|e| e.code == ErrorCode::TransactionUnbalanced));
+    assert!(
+        !errors
+            .iter()
+            .any(|e| e.code == ErrorCode::TransactionUnbalanced)
+    );
 }

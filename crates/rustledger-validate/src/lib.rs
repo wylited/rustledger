@@ -994,7 +994,13 @@ fn validate_balance(state: &mut LedgerState, bal: &Balance, errors: &mut Vec<Val
             let message = if is_explicit {
                 format!(
                     "Balance exceeds explicit tolerance for {}: expected {} {} ~ {}, got {} {} (difference: {})",
-                    bal.account, expected, bal.amount.currency, tolerance, actual, bal.amount.currency, difference
+                    bal.account,
+                    expected,
+                    bal.amount.currency,
+                    tolerance,
+                    actual,
+                    bal.amount.currency,
+                    difference
                 )
             } else {
                 format!(
@@ -1166,9 +1172,11 @@ mod tests {
         ];
 
         let errors = validate(&directives);
-        assert!(errors
-            .iter()
-            .any(|e| e.code == ErrorCode::BalanceAssertionFailed));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.code == ErrorCode::BalanceAssertionFailed)
+        );
     }
 
     #[test]
@@ -1190,9 +1198,11 @@ mod tests {
         ];
 
         let errors = validate(&directives);
-        assert!(errors
-            .iter()
-            .any(|e| e.code == ErrorCode::TransactionUnbalanced));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.code == ErrorCode::TransactionUnbalanced)
+        );
     }
 
     #[test]
@@ -1213,9 +1223,11 @@ mod tests {
         ];
 
         let errors = validate(&directives);
-        assert!(errors
-            .iter()
-            .any(|e| e.code == ErrorCode::CurrencyNotAllowed));
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.code == ErrorCode::CurrencyNotAllowed)
+        );
     }
 
     #[test]

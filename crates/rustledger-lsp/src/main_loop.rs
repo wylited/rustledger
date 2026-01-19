@@ -73,7 +73,7 @@ use lsp_types::{
     WorkspaceSymbolParams,
 };
 use parking_lot::RwLock;
-use rustledger_parser::{parse, ParseResult};
+use rustledger_parser::{ParseResult, parse};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -924,7 +924,7 @@ impl MainLoopState {
             None => {
                 return Ok(serde_json::json!({
                     "error": "No document open"
-                }))
+                }));
             }
         };
 

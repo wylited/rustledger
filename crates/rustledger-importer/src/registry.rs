@@ -177,10 +177,12 @@ mod tests {
         let unknown_path = Path::new("document.pdf");
         let result = registry.extract(unknown_path);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No importer found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No importer found")
+        );
     }
 
     #[test]

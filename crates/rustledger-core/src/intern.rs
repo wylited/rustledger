@@ -52,10 +52,10 @@ pub type AsVecInternedStr = rkyv::with::Map<AsInternedStr>;
 #[cfg(feature = "rkyv")]
 mod rkyv_impl {
     use super::InternedStr;
+    use rkyv::Place;
     use rkyv::rancor::Fallible;
     use rkyv::string::ArchivedString;
     use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
-    use rkyv::Place;
 
     /// Wrapper to serialize `InternedStr` as String with rkyv.
     /// Use with `#[rkyv(with = AsInternedStr)]` on `InternedStr` fields.
@@ -538,9 +538,9 @@ pub use rkyv_decimal::AsDecimal;
 
 #[cfg(feature = "rkyv")]
 mod rkyv_decimal {
+    use rkyv::Place;
     use rkyv::rancor::Fallible;
     use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
-    use rkyv::Place;
     use rust_decimal::Decimal;
 
     /// Wrapper to serialize `Decimal` as fixed 16-byte binary with rkyv.
@@ -588,9 +588,9 @@ pub use rkyv_date::AsNaiveDate;
 #[cfg(feature = "rkyv")]
 mod rkyv_date {
     use chrono::{Datelike, NaiveDate};
+    use rkyv::Place;
     use rkyv::rancor::Fallible;
     use rkyv::with::{ArchiveWith, DeserializeWith, SerializeWith};
-    use rkyv::Place;
 
     /// Wrapper to serialize `NaiveDate` as i32 (days from Common Era) with rkyv.
     /// This is 4 bytes instead of 10+ for string, and faster to serialize.

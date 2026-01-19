@@ -278,12 +278,14 @@ mod tests {
         assert_eq!(lenses.len(), 3);
 
         // First lens is for the open directive
-        assert!(lenses[0]
-            .command
-            .as_ref()
-            .unwrap()
-            .title
-            .contains("2 transactions"));
+        assert!(
+            lenses[0]
+                .command
+                .as_ref()
+                .unwrap()
+                .title
+                .contains("2 transactions")
+        );
     }
 
     #[test]

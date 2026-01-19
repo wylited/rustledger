@@ -23,10 +23,10 @@ use rustledger_core::{
     Query, Transaction,
 };
 
-use crate::error::{ParseError, ParseErrorKind};
-use crate::logos_lexer::{tokenize, Token};
-use crate::span::{Span, Spanned};
 use crate::ParseResult;
+use crate::error::{ParseError, ParseErrorKind};
+use crate::logos_lexer::{Token, tokenize};
+use crate::span::{Span, Spanned};
 
 // ============================================================================
 // Constants for Error Detection
@@ -138,8 +138,8 @@ fn index_to_byte_span(tokens: &[SpannedToken<'_>], start_idx: usize, end_idx: us
 // ============================================================================
 
 /// Match a date token and extract the `NaiveDate`.
-fn tok_date<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], NaiveDate, TokExtra<'src>> + Clone {
+fn tok_date<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], NaiveDate, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Date(_)))
         .try_map(|t: SpannedToken<'src>, span| {
@@ -189,8 +189,8 @@ fn tok_date<'src>(
 }
 
 /// Match a number token and extract the Decimal.
-fn tok_number<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Decimal, TokExtra<'src>> + Clone {
+fn tok_number<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Decimal, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Number(_)))
         .try_map(|t: SpannedToken<'src>, span| {
@@ -206,8 +206,8 @@ fn tok_number<'src>(
 }
 
 /// Match a string token and extract the content (without quotes).
-fn tok_string<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], String, TokExtra<'src>> + Clone {
+fn tok_string<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], String, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::String(_)))
         .map(|t: SpannedToken<'src>| {
@@ -245,8 +245,8 @@ fn tok_string<'src>(
 }
 
 /// Match an account token and extract the string.
-fn tok_account<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
+fn tok_account<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Account(_)))
         .map(|t: SpannedToken<'src>| {
@@ -260,8 +260,8 @@ fn tok_account<'src>(
 }
 
 /// Match a currency token and extract the string.
-fn tok_currency<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
+fn tok_currency<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Currency(_)))
         .map(|t: SpannedToken<'src>| {
@@ -275,8 +275,8 @@ fn tok_currency<'src>(
 }
 
 /// Match a tag token and extract the string (without # prefix).
-fn tok_tag<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
+fn tok_tag<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Tag(_)))
         .map(|t: SpannedToken<'src>| {
@@ -291,8 +291,8 @@ fn tok_tag<'src>(
 }
 
 /// Match a link token and extract the string (without ^ prefix).
-fn tok_link<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
+fn tok_link<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::Link(_)))
         .map(|t: SpannedToken<'src>| {
@@ -307,8 +307,8 @@ fn tok_link<'src>(
 }
 
 /// Match a metadata key token and extract the key (without colon).
-fn tok_meta_key<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
+fn tok_meta_key<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], &'src str, TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::MetaKey(_)))
         .map(|t: SpannedToken<'src>| {
@@ -372,8 +372,8 @@ fn tok_indent<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokEx
 }
 
 /// Match a deep indent token (4+ spaces) - for posting metadata.
-fn tok_deep_indent<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
+fn tok_deep_indent<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::DeepIndent(_)))
         .to(())
@@ -456,11 +456,7 @@ fn tok_expr<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], Decimal, To
             .then(atom)
             .map(|(signs, n): (Vec<char>, Decimal)| {
                 let neg_count = signs.iter().filter(|&&c| c == '-').count();
-                if neg_count % 2 == 1 {
-                    -n
-                } else {
-                    n
-                }
+                if neg_count % 2 == 1 { -n } else { n }
             });
 
         // Term: unary combined with * and /
@@ -494,16 +490,16 @@ fn tok_expr<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], Decimal, To
 }
 
 /// Parse an amount (number + currency).
-fn tok_amount<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Amount, TokExtra<'src>> + Clone {
+fn tok_amount<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Amount, TokExtra<'src>> + Clone {
     tok_expr()
         .then(tok_currency())
         .map(|(number, currency)| Amount::new(number, currency))
 }
 
 /// Parse an incomplete amount (for postings).
-fn tok_incomplete_amount<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], IncompleteAmount, TokExtra<'src>> + Clone {
+fn tok_incomplete_amount<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], IncompleteAmount, TokExtra<'src>> + Clone {
     choice((
         // Full amount: number + currency
         tok_expr()
@@ -543,8 +539,8 @@ fn tok_hash<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtr
 }
 
 /// Parse a single cost component.
-fn tok_cost_component<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], TokCostComponent, TokExtra<'src>> + Clone {
+fn tok_cost_component<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], TokCostComponent, TokExtra<'src>> + Clone {
     choice((
         // Date (must come before number to avoid conflicts)
         tok_date().map(TokCostComponent::Date),
@@ -651,8 +647,8 @@ fn build_tok_cost_spec(components: Vec<TokCostComponent>, is_total_brace: bool) 
 
 /// Parse cost components with optional commas/slashes as delimiters.
 /// Allows empty components: {, 100.0 USD, , }
-fn tok_cost_components<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Vec<TokCostComponent>, TokExtra<'src>> + Clone {
+fn tok_cost_components<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Vec<TokCostComponent>, TokExtra<'src>> + Clone {
     // A delimiter is a comma or slash
     let delimiter = tok_comma().or(tok_slash()).to(());
 
@@ -667,8 +663,8 @@ fn tok_cost_components<'src>(
 }
 
 /// Parse a cost specification: { ... }, {{ ... }}, or {# ... }.
-fn tok_cost_spec<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], CostSpec, TokExtra<'src>> + Clone {
+fn tok_cost_spec<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], CostSpec, TokExtra<'src>> + Clone {
     choice((
         // Total cost: {{ ... }} (legacy syntax)
         tok_ldoublebrace()
@@ -690,8 +686,8 @@ fn tok_cost_spec<'src>(
 
 /// Parse a price annotation: @ [amount] or @@ [amount].
 /// Amount can be missing for incomplete inputs.
-fn tok_price_annotation<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], PriceAnnotation, TokExtra<'src>> + Clone {
+fn tok_price_annotation<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], PriceAnnotation, TokExtra<'src>> + Clone {
     // Complete amount: expr + currency (use tok_expr() for arithmetic)
     let complete_amount = tok_expr()
         .then(tok_currency())
@@ -740,8 +736,8 @@ fn tok_boolean<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], bool, To
 }
 
 /// Parse a metadata value.
-fn tok_meta_value<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], MetaValue, TokExtra<'src>> + Clone {
+fn tok_meta_value<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], MetaValue, TokExtra<'src>> + Clone {
     choice((
         tok_string().map(MetaValue::String),
         tok_boolean().map(MetaValue::Bool),
@@ -779,8 +775,8 @@ enum ParsedItem {
 // ============================================================================
 
 /// Parse an option directive.
-fn tok_option_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_option_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_option()
         .ignore_then(tok_string())
         .then(tok_string())
@@ -789,8 +785,8 @@ fn tok_option_directive<'src>(
 }
 
 /// Parse an include directive.
-fn tok_include_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_include_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_include()
         .ignore_then(tok_string())
         .then_ignore(tok_comment().or_not())
@@ -798,8 +794,8 @@ fn tok_include_directive<'src>(
 }
 
 /// Parse a plugin directive.
-fn tok_plugin_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_plugin_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_plugin()
         .ignore_then(tok_string())
         .then(tok_string().or_not())
@@ -808,8 +804,8 @@ fn tok_plugin_directive<'src>(
 }
 
 /// Parse a pushtag directive.
-fn tok_pushtag_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_pushtag_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_pushtag()
         .ignore_then(tok_tag())
         .then_ignore(tok_comment().or_not())
@@ -817,8 +813,8 @@ fn tok_pushtag_directive<'src>(
 }
 
 /// Parse a poptag directive.
-fn tok_poptag_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_poptag_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_poptag()
         .ignore_then(tok_tag())
         .then_ignore(tok_comment().or_not())
@@ -826,8 +822,8 @@ fn tok_poptag_directive<'src>(
 }
 
 /// Parse a pushmeta directive.
-fn tok_pushmeta_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_pushmeta_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_pushmeta()
         .ignore_then(tok_meta_key())
         .then(tok_meta_value())
@@ -836,8 +832,8 @@ fn tok_pushmeta_directive<'src>(
 }
 
 /// Parse a popmeta directive.
-fn tok_popmeta_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_popmeta_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     tok_popmeta()
         .ignore_then(tok_meta_key())
         .then_ignore(tok_comment().or_not())
@@ -861,8 +857,8 @@ enum PostingOrMeta {
 }
 
 /// Parse posting-level metadata (4+ spaces indent).
-fn tok_posting_meta<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (String, MetaValue), TokExtra<'src>> + Clone {
+fn tok_posting_meta<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (String, MetaValue), TokExtra<'src>> + Clone {
     tok_newline()
         .ignore_then(tok_deep_indent())
         .ignore_then(tok_meta_key())
@@ -872,8 +868,8 @@ fn tok_posting_meta<'src>(
 }
 
 /// Parse a posting line with its metadata.
-fn tok_posting_with_meta<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Posting, TokExtra<'src>> + Clone {
+fn tok_posting_with_meta<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Posting, TokExtra<'src>> + Clone {
     // Optional flag
     let flag = tok_flag().or_not();
 
@@ -920,8 +916,8 @@ fn tok_posting_with_meta<'src>(
 }
 
 /// Parse a metadata line inside a directive, returning None for comment-only lines.
-fn tok_meta_or_comment<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Option<(String, MetaValue)>, TokExtra<'src>> + Clone
+fn tok_meta_or_comment<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Option<(String, MetaValue)>, TokExtra<'src>> + Clone
 {
     // Actual metadata line
     let meta_line = tok_newline()
@@ -941,9 +937,8 @@ fn tok_meta_or_comment<'src>(
 }
 
 /// Parse metadata lines, filtering out comment-only lines.
-fn tok_meta_lines<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Vec<(String, MetaValue)>, TokExtra<'src>> + Clone
-{
+fn tok_meta_lines<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Vec<(String, MetaValue)>, TokExtra<'src>> + Clone {
     tok_meta_or_comment()
         .repeated()
         .collect::<Vec<_>>()
@@ -951,8 +946,8 @@ fn tok_meta_lines<'src>(
 }
 
 /// Parse posting or metadata inside a transaction.
-fn tok_posting_or_meta<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Option<PostingOrMeta>, TokExtra<'src>> + Clone {
+fn tok_posting_or_meta<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Option<PostingOrMeta>, TokExtra<'src>> + Clone {
     let meta_entry = tok_newline()
         .ignore_then(tok_indent())
         .ignore_then(tok_meta_key())
@@ -1012,8 +1007,8 @@ fn tok_posting_or_meta<'src>(
 }
 
 /// Parse a transaction directive.
-fn tok_transaction_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_transaction_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     let header_item = choice((
         tok_string().map(TxnHeaderItem::String),
         tok_tag().map(|t| TxnHeaderItem::Tag(t.to_string())),
@@ -1080,8 +1075,8 @@ fn tok_transaction_directive<'src>(
 
 /// Parse a balance directive.
 /// Format: DATE balance ACCOUNT NUMBER [~ TOLERANCE] CURRENCY [COST]
-fn tok_balance_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_balance_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     // Amount with optional tolerance: EXPR [~ TOLERANCE] CURRENCY
     // e.g., "200 USD", "200 ~ 0.002 USD", "(1 + 5) / 2.1 USD"
     let tolerance = tok_tilde().ignore_then(tok_expr());
@@ -1113,8 +1108,8 @@ fn tok_balance_directive<'src>(
 }
 
 /// Parse an open directive.
-fn tok_open_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_open_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_open())
         .then(tok_account())
@@ -1136,8 +1131,8 @@ fn tok_open_directive<'src>(
 }
 
 /// Parse a close directive.
-fn tok_close_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_close_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_close())
         .then(tok_account())
@@ -1153,8 +1148,8 @@ fn tok_close_directive<'src>(
 }
 
 /// Parse a commodity directive.
-fn tok_commodity_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_commodity_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_commodity())
         .then(tok_currency())
@@ -1170,8 +1165,8 @@ fn tok_commodity_directive<'src>(
 }
 
 /// Parse a pad directive.
-fn tok_pad_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_pad_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_pad())
         .then(tok_account())
@@ -1188,8 +1183,8 @@ fn tok_pad_directive<'src>(
 }
 
 /// Parse an event directive.
-fn tok_event_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_event_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_event())
         .then(tok_string())
@@ -1206,8 +1201,8 @@ fn tok_event_directive<'src>(
 }
 
 /// Parse a query directive.
-fn tok_query_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_query_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_query())
         .then(tok_string())
@@ -1224,8 +1219,8 @@ fn tok_query_directive<'src>(
 }
 
 /// Parse a note directive.
-fn tok_note_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_note_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_note())
         .then(tok_account())
@@ -1242,8 +1237,8 @@ fn tok_note_directive<'src>(
 }
 
 /// Parse a document directive (with optional tags and links).
-fn tok_document_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_document_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     // Tags and links after the path
     let tag_or_link = choice((
         tok_tag().map(|t| (Some(t.to_string()), None)),
@@ -1279,8 +1274,8 @@ fn tok_document_directive<'src>(
 }
 
 /// Parse a price directive.
-fn tok_price_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_price_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_price())
         .then(tok_currency())
@@ -1297,8 +1292,8 @@ fn tok_price_directive<'src>(
 }
 
 /// Parse a custom directive.
-fn tok_custom_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
+fn tok_custom_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (NaiveDate, Directive), TokExtra<'src>> {
     tok_date()
         .then_ignore(tok_custom())
         .then(tok_string())
@@ -1318,8 +1313,8 @@ fn tok_custom_directive<'src>(
 }
 
 /// Parse a dated directive.
-fn tok_dated_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
+fn tok_dated_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], ParsedItem, TokExtra<'src>> {
     choice((
         tok_transaction_directive(),
         tok_balance_directive(),
@@ -1346,8 +1341,8 @@ fn tok_shebang<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokE
 }
 
 /// Match an Emacs directive (e.g., #+STARTUP: showall).
-fn tok_emacs_directive<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
+fn tok_emacs_directive<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
     any()
         .filter(|t: &SpannedToken<'_>| matches!(t.token, Token::EmacsDirective(_)))
         .to(())
@@ -1356,8 +1351,8 @@ fn tok_emacs_directive<'src>(
 /// Match an org-mode style header line (e.g., "* Options", "** Section").
 /// These are lines starting with one or more `*` at the beginning of a line,
 /// used for organization but ignored by beancount.
-fn tok_org_header_line<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
+fn tok_org_header_line<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], (), TokExtra<'src>> + Clone {
     // Match one or more Star tokens followed by any non-newline tokens until newline
     tok_star()
         .repeated()
@@ -1406,9 +1401,8 @@ fn tok_skip_to_newline<'src>() -> impl Parser<'src, &'src [SpannedToken<'src>], 
 }
 
 /// Parse a complete file with error recovery.
-fn tok_file_parser<'src>(
-) -> impl Parser<'src, &'src [SpannedToken<'src>], Vec<(ParsedItem, usize, usize)>, TokExtra<'src>>
-{
+fn tok_file_parser<'src>()
+-> impl Parser<'src, &'src [SpannedToken<'src>], Vec<(ParsedItem, usize, usize)>, TokExtra<'src>> {
     // Skip leading newlines
     tok_newline().repeated().ignore_then(
         // Try to parse an entry, or skip a bad line on failure

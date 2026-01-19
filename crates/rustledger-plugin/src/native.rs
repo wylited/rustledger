@@ -155,7 +155,7 @@ impl NativePlugin for ImplicitPricesPlugin {
 
                         // Check for cost with price info
                         if let Some(ref cost) = posting.cost {
-                            if let (Some(ref number), Some(ref currency)) =
+                            if let (Some(number), Some(currency)) =
                                 (&cost.number_per, &cost.currency)
                             {
                                 let price_wrapper = DirectiveWrapper {
@@ -576,8 +576,8 @@ impl NativePlugin for NoDuplicatesPlugin {
     }
 
     fn process(&self, input: PluginInput) -> PluginOutput {
-        use std::collections::hash_map::DefaultHasher;
         use std::collections::HashSet;
+        use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
 
         fn hash_transaction(date: &str, txn: &TransactionData) -> u64 {
@@ -1829,10 +1829,12 @@ mod check_drained_tests {
         let output = plugin.process(input);
         // Should not add balance assertions for income/expense accounts
         assert_eq!(output.directives.len(), 2);
-        assert!(!output
-            .directives
-            .iter()
-            .any(|d| d.directive_type == "balance"));
+        assert!(
+            !output
+                .directives
+                .iter()
+                .any(|d| d.directive_type == "balance")
+        );
     }
 
     #[test]
@@ -2713,19 +2715,19 @@ impl NativePlugin for CurrencyAccountsPlugin {
                 // If we have multiple currencies with non-zero totals, add balancing postings
                 let non_zero_currencies: Vec<_> = currency_totals
                     .iter()
-                    .filter(|(_, &total)| total != Decimal::ZERO)
+                    .filter(|&(_, total)| *total != Decimal::ZERO)
                     .collect();
 
                 if non_zero_currencies.len() > 1 {
                     // Clone the transaction and add currency account postings
                     let mut modified_txn = txn.clone();
 
-                    for (currency, &total) in &non_zero_currencies {
+                    for &(currency, total) in &non_zero_currencies {
                         // Add posting to currency account to neutralize
                         modified_txn.postings.push(PostingData {
                             account: format!("{base_account}:{currency}"),
                             units: Some(AmountData {
-                                number: (-total).to_string(),
+                                number: (-*total).to_string(),
                                 currency: (*currency).clone(),
                             }),
                             cost: None,
@@ -2948,10 +2950,11 @@ mod currency_accounts_tests {
         let output = plugin.process(input);
         if let DirectiveData::Transaction(txn) = &output.directives[0].data {
             // Check for custom base account
-            assert!(txn
-                .postings
-                .iter()
-                .any(|p| p.account.starts_with("Income:Trading:")));
+            assert!(
+                txn.postings
+                    .iter()
+                    .any(|p| p.account.starts_with("Income:Trading:"))
+            );
         }
     }
 }

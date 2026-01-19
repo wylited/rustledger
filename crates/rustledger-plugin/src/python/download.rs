@@ -216,6 +216,6 @@ mod tests {
         assert!(PYTHON_VERSION.starts_with("3."));
         assert!(DOWNLOAD_URL.contains("cpython-wasi"));
         assert_eq!(EXPECTED_SHA256.len(), 64); // SHA256 hex = 64 chars
-                                               // DOWNLOAD_SIZE_MB is a compile-time constant; clippy catches assertions on constants
+        // DOWNLOAD_SIZE_MB is a compile-time constant; clippy catches assertions on constants
     }
 }

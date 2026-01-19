@@ -3,8 +3,8 @@
 //! Each LSP request receives an immutable snapshot of the world state.
 //! This allows requests to be processed concurrently without locks.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Global revision counter for cancellation detection.
 static REVISION: AtomicU64 = AtomicU64::new(0);

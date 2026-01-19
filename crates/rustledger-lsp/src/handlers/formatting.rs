@@ -79,11 +79,7 @@ pub fn handle_formatting(
     });
     edits.dedup_by(|a, b| a.range == b.range);
 
-    if edits.is_empty() {
-        None
-    } else {
-        Some(edits)
-    }
+    if edits.is_empty() { None } else { Some(edits) }
 }
 
 /// Format a posting line for alignment.

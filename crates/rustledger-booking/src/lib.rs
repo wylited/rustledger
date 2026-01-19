@@ -25,11 +25,11 @@
 mod interpolate;
 mod pad;
 
-pub use interpolate::{interpolate, InterpolationError, InterpolationResult};
-pub use pad::{expand_pads, merge_with_padding, process_pads, PadError, PadResult};
+pub use interpolate::{InterpolationError, InterpolationResult, interpolate};
+pub use pad::{PadError, PadResult, expand_pads, merge_with_padding, process_pads};
 
-use rust_decimal::prelude::Signed;
 use rust_decimal::Decimal;
+use rust_decimal::prelude::Signed;
 use rustledger_core::{Amount, IncompleteAmount, InternedStr, Transaction};
 use std::collections::HashMap;
 

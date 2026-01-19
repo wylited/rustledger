@@ -3,9 +3,9 @@
 //! This module provides the runtime for executing Python beancount plugins
 //! in a sandboxed WASM environment using `CPython` compiled to WASI.
 
+use super::PythonError;
 use super::compat::BEANCOUNT_COMPAT_PY;
 use super::download;
-use super::PythonError;
 use crate::types::{PluginError, PluginErrorSeverity, PluginInput, PluginOutput};
 use anyhow::Result;
 use std::sync::Arc;

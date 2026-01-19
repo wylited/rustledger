@@ -9,7 +9,7 @@ use chrono::NaiveDate;
 use proptest::prelude::*;
 use rust_decimal::Decimal;
 use rustledger_core::{Amount, Balance, Directive, IncompleteAmount, Open, Posting, Transaction};
-use rustledger_validate::{validate, ErrorCode};
+use rustledger_validate::{ErrorCode, validate};
 
 // ============================================================================
 // Test Strategies

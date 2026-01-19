@@ -79,11 +79,7 @@ pub fn handle_inlay_hints(
         }
     }
 
-    if hints.is_empty() {
-        None
-    } else {
-        Some(hints)
-    }
+    if hints.is_empty() { None } else { Some(hints) }
 }
 
 /// Handle an inlay hint resolve request.

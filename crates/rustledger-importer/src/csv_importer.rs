@@ -1,7 +1,7 @@
 //! CSV file importer.
 
-use crate::config::{ColumnSpec, CsvConfig, ImporterConfig};
 use crate::ImportResult;
+use crate::config::{ColumnSpec, CsvConfig, ImporterConfig};
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
 use rust_decimal::Decimal;

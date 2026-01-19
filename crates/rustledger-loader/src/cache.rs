@@ -18,8 +18,8 @@
 
 use crate::Options;
 use rust_decimal::Decimal;
-use rustledger_core::intern::StringInterner;
 use rustledger_core::Directive;
+use rustledger_core::intern::StringInterner;
 use rustledger_parser::Spanned;
 use sha2::{Digest, Sha256};
 use std::fs;
