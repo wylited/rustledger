@@ -20,21 +20,14 @@ jobs:
       contents: read
       pull-requests: write
     steps:
-      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+      # Use GitHub API to get diff instead of checking out untrusted PR code
       - name: Get diff of the pull request
         id: get_diff
-        shell: bash
         env:
-          PULL_REQUEST_HEAD_REF: "${{ github.event.pull_request.head.ref }}"
-          PULL_REQUEST_BASE_REF: "${{ github.event.pull_request.base.ref }}"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |-
-          git fetch origin "$PULL_REQUEST_HEAD_REF"
-          git fetch origin "$PULL_REQUEST_BASE_REF"
-          git checkout "$PULL_REQUEST_HEAD_REF"
-          git diff "origin/$PULL_REQUEST_BASE_REF" > "diff.txt"
+          gh pr diff "$PR_NUMBER" --repo "${{ github.repository }}" > "diff.txt"
           {
             echo "pull_request_diff<<EOF";
             cat "diff.txt";
