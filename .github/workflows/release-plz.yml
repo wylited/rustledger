@@ -35,20 +35,20 @@ jobs:
     if: github.repository == 'rustledger/rustledger'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           fetch-depth: 0
           # Use PAT for checkout so PR triggers CI workflows
           token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
 
       # Use PAT to create PR so it triggers CI workflows automatically
       # (GITHUB_TOKEN can't trigger other workflows)
       - name: Run release-plz
         id: release-plz
-        uses: release-plz/action@v0.5
+        uses: release-plz/action@99b33d83e322fcd1b1fa126f8c4a74744aae3c8d # v0.5
         with:
           command: release-pr
         env:
@@ -132,15 +132,15 @@ jobs:
       contains(github.event.head_commit.message, 'chore: release')
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           fetch-depth: 0
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
 
       - name: Run release-plz release
-        uses: release-plz/action@v0.5
+        uses: release-plz/action@99b33d83e322fcd1b1fa126f8c4a74744aae3c8d # v0.5
         with:
           command: release
         env:

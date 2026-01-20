@@ -14,7 +14,7 @@ import json
 import re
 import sys
 import argparse
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from typing import Any
 
 

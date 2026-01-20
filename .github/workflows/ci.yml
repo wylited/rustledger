@@ -31,8 +31,8 @@ jobs:
     name: Format
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           components: rustfmt
       - run: cargo fmt --all -- --check
@@ -61,12 +61,12 @@ jobs:
             components: ""
             env: RUSTDOCFLAGS=-Dwarnings
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           components: ${{ matrix.components }}
-      - uses: mozilla-actions/sccache-action@v0.0.9
-      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@d651010b8da762cde178750d8eda7b5febfe147a # v0.0.9
+      - uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
       - name: ${{ matrix.name }}
         run: ${{ matrix.cmd }}
         env:
@@ -83,10 +83,10 @@ jobs:
     # Only run on PRs to catch breaking changes before merge
     if: github.event_name == 'pull_request'
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
       - name: Check for Rust changes
         id: changes
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
         with:
           filters: |
             rust:
@@ -95,7 +95,7 @@ jobs:
               - 'Cargo.lock'
       - name: Check semver compatibility
         if: steps.changes.outputs.rust == 'true'
-        uses: obi1kenobi/cargo-semver-checks-action@v2
+        uses: obi1kenobi/cargo-semver-checks-action@5b298c9520f7096a4683c0bd981a7ac5a7e249ae # v2
         with:
           feature-group: all-features
           exclude: rustledger-lsp,rustledger-wasm
@@ -110,9 +110,9 @@ jobs:
     env:
       RUSTC_WRAPPER: ""  # Disable sccache for MSRV check
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@1.85
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: dtolnay/rust-toolchain@b4ff1cab8059f5021ff214e71e334ca5b5367069 # 1.85
+      - uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
       - name: Check MSRV compatibility
         run: cargo check --workspace --all-features
 
@@ -123,8 +123,8 @@ jobs:
     env:
       RUSTC_WRAPPER: ""  # Disable sccache for deny check
     steps:
-      - uses: actions/checkout@v6
-      - uses: taiki-e/install-action@cargo-deny
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: taiki-e/install-action@0fc09cf1c2f18a9f700d18b3d6eb8f7ee877c7a2 # cargo-deny
       - name: Check advisories, licenses, and bans
         run: cargo deny check
 
@@ -136,13 +136,13 @@ jobs:
       RUST_MIN_STACK: 8388608
       RUSTC_WRAPPER: ""  # Disable sccache for coverage
     steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
+      - uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           components: llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
+        uses: taiki-e/install-action@fb03c6692ef8fff8e8e84e2aa701f168d7ed3811 # cargo-llvm-cov
       - name: Generate coverage report
         # Only cover core crates - rustledger (CLI) pulls in wasmtime which causes LLVM linker OOM
         run: |
@@ -156,7 +156,7 @@ jobs:
             --package rustledger-plugin \
             --package rustledger-importer
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: lcov.info
           fail_ci_if_error: false

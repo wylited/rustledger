@@ -179,11 +179,15 @@ def generate_booking_test(trace: dict, test_name: str) -> str:
 
         if action in ("AddLot", "Add"):
             # Extract lot info from variables
-            currency = vars.get("currency", "USD")
-            if isinstance(currency, dict):
-                currency = list(currency.get("elements", ["USD"]))[0] if currency.get("elements") else "USD"
+            currency_val = vars.get("currency", "USD")
+            currency = (
+                list(currency_val.get("elements", ["USD"]))[0]
+                if isinstance(currency_val, dict) and currency_val.get("elements")
+                else currency_val if not isinstance(currency_val, dict)
+                else "USD"
+            )
 
-            lines.append(f"    // Action: {action}")
+            lines.append(f"    // Action: {action} (currency: {currency})")
             lines.append(f"    // TODO: Extract lot details from trace")
             lines.append(f"    // inventory.add_position(position);")
 
