@@ -69,18 +69,44 @@ jobs:
             echo "Could not extract PR number from output"
           fi
 
+      # Sync npm versions to the release PR branch (not main!)
+      # This ensures the version sync is included when the PR merges
       - name: Sync npm package versions
         if: steps.release-plz.outputs.pr_created == 'true' || steps.release-plz.outputs.pr_updated == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+          PR_DATA: ${{ steps.release-plz.outputs.pr }}
         run: |
-          # Get the version from Cargo.toml
-          VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          # Extract the PR branch name from release-plz output
+          PR_BRANCH=$(echo "$PR_DATA" | jq -r '.head_branch // empty' 2>/dev/null || echo "")
+          if [ -z "$PR_BRANCH" ]; then
+            echo "::error::Could not extract PR branch from release-plz output"
+            exit 1
+          fi
+          echo "Release PR branch: $PR_BRANCH"
+
+          # Checkout the release PR branch
+          git fetch origin "$PR_BRANCH"
+          git checkout "$PR_BRANCH"
+
+          # Get the version from the workspace Cargo.toml [workspace.package] section
+          VERSION=$(grep -A5 '^\[workspace\.package\]' Cargo.toml | grep '^version' | head -1 | sed 's/version = "\(.*\)"/\1/')
+          if [ -z "$VERSION" ]; then
+            # Fallback to root package version
+            VERSION=$(grep '^version = ' Cargo.toml | head -1 | sed 's/version = "\(.*\)"/\1/')
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::Could not extract version from Cargo.toml"
+            exit 1
+          fi
           echo "Syncing npm packages to version $VERSION"
 
-          # Update MCP server package.json (version and @rustledger/wasm dependency)
+          # Update MCP server package.json using jq for safer JSON manipulation
           if [ -f "packages/mcp-server/package.json" ]; then
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" packages/mcp-server/package.json
-            sed -i "s/\"@rustledger\/wasm\": \"\\^[^\"]*\"/\"@rustledger\/wasm\": \"^$VERSION\"/" packages/mcp-server/package.json
-            echo "Updated packages/mcp-server/package.json"
+            jq --arg ver "$VERSION" '.version = $ver | .dependencies["@rustledger/wasm"] = "^\($ver)"' \
+              packages/mcp-server/package.json > packages/mcp-server/package.json.tmp
+            mv packages/mcp-server/package.json.tmp packages/mcp-server/package.json
+            echo "Updated packages/mcp-server/package.json to version $VERSION"
           fi
 
           # Check if there are changes to commit
@@ -91,8 +117,8 @@ jobs:
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git add packages/
             git commit -m "chore: sync npm package versions to $VERSION"
-            git push
-            echo "npm package versions synced"
+            git push origin "$PR_BRANCH"
+            echo "npm package versions synced to PR branch"
           fi
 
   # Create release when PR is merged
