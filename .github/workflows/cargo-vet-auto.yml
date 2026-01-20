@@ -18,17 +18,17 @@ jobs:
     if: github.actor == 'dependabot[bot]'
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ github.head_ref }}
           # Need PAT to push changes back to the PR branch
           token: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
 
       - name: Install cargo-vet
-        uses: taiki-e/install-action@cargo-vet
+        uses: taiki-e/install-action@30791125b88ed3200de59e9b5edbf78d1949e41f # v2
 
       - name: Regenerate exemptions
         run: cargo vet regenerate exemptions

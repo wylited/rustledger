@@ -38,7 +38,7 @@ jobs:
     name: Validate Version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Validate tag matches Cargo.toml version
@@ -97,17 +97,17 @@ jobs:
             os: windows-latest
             # No PGO - can't run ARM binary on x86 runner
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           targets: ${{ matrix.target }}
           components: llvm-tools-preview
       - name: Install cross
         if: matrix.cross
-        uses: taiki-e/install-action@cross
+        uses: taiki-e/install-action@db5fe14d0f31ad3d2c6c8dbee23472867de1cc54 # cross
       - name: Install cargo-pgo
         if: matrix.pgo
         run: cargo install cargo-pgo
@@ -263,7 +263,7 @@ jobs:
           cd ../../..
           (Get-FileHash -Algorithm SHA256 $ARCHIVE).Hash.ToLower() + "  " + $ARCHIVE | Out-File -Encoding utf8 "${ARCHIVE}.sha256"
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: rustledger-${{ matrix.target }}
           path: |
@@ -276,11 +276,11 @@ jobs:
     needs: validate-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
         with:
           targets: wasm32-unknown-unknown
       - name: Install wasm-pack
@@ -296,7 +296,7 @@ jobs:
           sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" package.json
           sed -i 's/"name": "rustledger-wasm"/"name": "@rustledger\/wasm"/' package.json
       - name: Upload WASM artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: wasm-package
           path: crates/rustledger-wasm/pkg/
@@ -306,11 +306,11 @@ jobs:
     needs: [build, build-wasm]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           path: artifacts
           merge-multiple: true
@@ -339,7 +339,7 @@ jobs:
       - name: List artifacts
         run: ls -la artifacts/
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@26994186c0ac3ef5cae75ac16aa32e8153525f77 # v1
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           draft: false
@@ -357,13 +357,13 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6
         with:
           ref: ${{ env.RELEASE_TAG }}
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@4be9e76fd7c4901c61fb841f559994984270fce7 # stable
       - name: Authenticate with crates.io (trusted publishing)
-        uses: rust-lang/crates-io-auth-action@v1
+        uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1
       - name: Publish crates (in dependency order)
         run: |
           # Publish in dependency order with delay between each

@@ -11,11 +11,10 @@ Usage:
     python model_based_testing.py --spec Inventory --depth 3 --output tests/inventory_mbt.rs
 """
 
-import json
 import re
 import sys
 import argparse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 from itertools import product
