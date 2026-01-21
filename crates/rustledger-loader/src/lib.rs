@@ -102,6 +102,8 @@ pub enum LoadError {
 pub struct LoadResult {
     /// All directives from all files, in order.
     pub directives: Vec<Spanned<Directive>>,
+    /// Source file path for each directive (parallel to directives).
+    pub directive_sources: Vec<PathBuf>,
     /// Parsed options.
     pub options: Options,
     /// Plugins to load.
@@ -241,6 +243,7 @@ impl Loader {
     /// partial results to be returned.
     pub fn load(&mut self, path: &Path) -> Result<LoadResult, LoadError> {
         let mut directives = Vec::new();
+        let mut directive_sources = Vec::new();
         let mut options = Options::default();
         let mut plugins = Vec::new();
         let mut source_map = SourceMap::new();
@@ -260,6 +263,7 @@ impl Loader {
         self.load_recursive(
             &canonical,
             &mut directives,
+            &mut directive_sources,
             &mut options,
             &mut plugins,
             &mut source_map,
@@ -268,6 +272,7 @@ impl Loader {
 
         Ok(LoadResult {
             directives,
+            directive_sources,
             options,
             plugins,
             source_map,
@@ -279,6 +284,7 @@ impl Loader {
         &mut self,
         path: &Path,
         directives: &mut Vec<Spanned<Directive>>,
+        directive_sources: &mut Vec<PathBuf>,
         options: &mut Options,
         plugins: &mut Vec<Plugin>,
         source_map: &mut SourceMap,
@@ -375,14 +381,16 @@ impl Loader {
             }
 
             if let Err(e) =
-                self.load_recursive(&canonical, directives, options, plugins, source_map, errors)
+                self.load_recursive(&canonical, directives, directive_sources, options, plugins, source_map, errors)
             {
                 errors.push(e);
             }
         }
 
         // Add directives from this file
+        let count = result.directives.len();
         directives.extend(result.directives);
+        directive_sources.extend(std::iter::repeat(path.to_path_buf()).take(count));
 
         // Pop from stack
         self.include_stack.pop();

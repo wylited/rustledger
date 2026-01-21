@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <!-- Stat Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg dark:bg-gray-800">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-blue-500 rounded-md p-3">
+                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate dark:text-gray-400">Total Directives</dt>
+                        <dd class="text-3xl font-semibold text-gray-900 dark:text-white" hx-get="/api/stats/directives" hx-trigger="load">{{ directive_count }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stat Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg dark:bg-gray-800">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-green-500 rounded-md p-3">
+                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate dark:text-gray-400">Options Set</dt>
+                        <dd class="text-3xl font-semibold text-gray-900 dark:text-white">{{ option_count }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stat Card -->
+    <div class="bg-white overflow-hidden shadow rounded-lg dark:bg-gray-800">
+        <div class="p-5">
+            <div class="flex items-center">
+                <div class="flex-shrink-0 bg-purple-500 rounded-md p-3">
+                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                </div>
+                <div class="ml-5 w-0 flex-1">
+                    <dl>
+                        <dt class="text-sm font-medium text-gray-500 truncate dark:text-gray-400">Source File</dt>
+                        <dd class="text-lg font-medium text-gray-900 truncate dark:text-white" title="{{ filename }}">{{ filename }}</dd>
+                    </dl>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Transactions -->
+{% set transactions = recent_transactions %}
+{% include "partials/transaction_list.html" %}
+
+<!-- New Transaction Form -->
+{% include "partials/transaction_form.html" %}
+
+<div class="bg-white shadow rounded-lg dark:bg-gray-800">
+    <div class="px-4 py-5 border-b border-gray-200 sm:px-6 dark:border-gray-700">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">Recent Errors</h3>
+        <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Validation errors found in the ledger.</p>
+    </div>
+    <div class="px-4 py-5 sm:p-6">
+        {% if errors | length > 0 %}
+            <ul class="divide-y divide-gray-200 dark:divide-gray-700">
+                {% for error in errors %}
+                <li class="py-4">
+                    <div class="flex space-x-3">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <div class="flex-1 space-y-1">
+                            <div class="flex items-center justify-between">
+                                <h3 class="text-sm font-medium text-red-800 dark:text-red-400">{{ error }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <div class="text-center py-6">
+                <svg class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No errors found</h3>
+                <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Your ledger is looking healthy!</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock content %}

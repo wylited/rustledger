@@ -1,4 +1,5 @@
 [workspace]
+
 resolver = "3"
 members = [
   "crates/rustledger-core",
@@ -12,6 +13,7 @@ members = [
   "crates/rustledger",
   "crates/rustledger-wasm",
   "crates/rustledger-lsp",
+  "crates/rustledger-web",
 ]
 
 [workspace.package]

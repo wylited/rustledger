@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ account_name }}</h1>
+    <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+        Transaction History
+    </div>
+</div>
+
+<!-- Account Stats -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    <div class="bg-white overflow-hidden shadow rounded-lg dark:bg-gray-800">
+        <div class="p-5">
+            <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate dark:text-gray-400">Total Transactions</dt>
+                <dd class="mt-1 text-3xl font-semibold text-gray-900 dark:text-white">{{ transactions | length }}</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+
+<!-- Transactions List -->
+{% include "partials/transaction_list.html" %}
+
+<!-- New Transaction Form -->
+{% include "partials/transaction_form.html" %}
+{% endblock content %}

@@ -1,0 +1,49 @@
+{% macro account_tree_render(nodes) %}
+    {% for key, l1 in nodes %}
+    <li class="pl-2">
+        {% if l1.children | length > 0 %}
+        <details class="group">
+            <summary class="flex items-center px-2 py-1.5 text-sm font-medium rounded-md hover:bg-gray-50 cursor-pointer text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 select-none">
+                <svg class="mr-2 h-4 w-4 text-gray-400 group-open:rotate-90 transition-transform" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                </svg>
+                <span class="truncate">{{ l1.name }}</span>
+            </summary>
+            <ul class="pl-2 border-l border-gray-200 dark:border-gray-700 ml-3">
+                {% for key, l2 in l1.children %}
+                <li class="pl-2">
+                    {% if l2.children | length > 0 %}
+                    <details class="group">
+                        <summary class="flex items-center px-2 py-1.5 text-sm font-medium rounded-md hover:bg-gray-50 cursor-pointer text-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 select-none">
+                            <svg class="mr-2 h-4 w-4 text-gray-400 group-open:rotate-90 transition-transform" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                            </svg>
+                            <span class="truncate">{{ l2.name }}</span>
+                        </summary>
+                        <ul class="pl-2 border-l border-gray-200 dark:border-gray-700 ml-3">
+                            {% for key, l3 in l2.children %}
+                            <li class="pl-2">
+                                <a href="/accounts/{{ l3.full_name }}" class="flex items-center px-2 py-1.5 text-sm font-medium rounded-md hover:bg-gray-50 group text-gray-700 hover:text-primary truncate dark:text-gray-300 dark:hover:bg-gray-700" title="{{ l3.full_name }}">
+                                    <span class="truncate">{{ l3.name }}</span>
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                    {% else %}
+                    <a href="/accounts/{{ l2.full_name }}" class="flex items-center px-2 py-1.5 text-sm font-medium rounded-md hover:bg-gray-50 group text-gray-700 hover:text-primary truncate dark:text-gray-300 dark:hover:bg-gray-700 ml-6" title="{{ l2.full_name }}">
+                        <span class="truncate">{{ l2.name }}</span>
+                    </a>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </details>
+        {% else %}
+        <a href="/accounts/{{ l1.full_name }}" class="flex items-center px-2 py-1.5 text-sm font-medium rounded-md hover:bg-gray-50 group text-gray-700 hover:text-primary truncate dark:text-gray-300 dark:hover:bg-gray-700 ml-6" title="{{ l1.full_name }}">
+            <span class="truncate">{{ l1.name }}</span>
+        </a>
+        {% endif %}
+    </li>
+    {% endfor %}
+{% endmacro account_tree_render %}

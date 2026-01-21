@@ -1,0 +1,95 @@
+<div class="bg-white shadow rounded-lg dark:bg-gray-800 mb-8">
+    <div class="px-4 py-5 border-b border-gray-200 sm:px-6 dark:border-gray-700">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">Transactions</h3>
+    </div>
+    <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+                <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Date</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Status</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Payee / Narration</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Amount</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
+                {% for txn in transactions %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 {% if txn.flag == '!' %}opacity-60 bg-gray-50 dark:bg-gray-900{% endif %}">
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {{ txn.date }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {% if txn.line_number %}
+                        <button class="cursor-pointer focus:outline-none hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full p-1 transition-colors" 
+                                title="{% if txn.flag == '*' %}Mark as Uncleared{% else %}Mark as Cleared{% endif %}"
+                                hx-post="/api/transactions/toggle-status"
+                                hx-vals='{"offset": {{ txn.offset }}, "source_path": "{{ txn.source_path }}"}'>
+                            {% if txn.flag == '*' %}
+                            <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            {% else %}
+                            <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {% endif %}
+                        </button>
+                        {% else %}
+                            {% if txn.flag == '*' %}
+                            <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                            </svg>
+                            {% else %}
+                            <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
+                        {% if txn.payee %}
+                            <span class="font-semibold">{{ txn.payee }}</span>
+                            <span class="text-gray-400 mx-1">|</span>
+                        {% endif %}
+                        {{ txn.narration }}
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right dark:text-gray-400">
+                        <div class="flex flex-col items-end gap-1">
+                            {% for posting in txn.postings %}
+                                <div class="flex items-center gap-2 {% if account_name is defined and posting.account == account_name %}bg-yellow-50 dark:bg-yellow-900/20 px-1 rounded{% endif %}">
+                                    <span class="text-xs text-gray-400 truncate max-w-[150px]">{{ posting.account }}</span>
+                                    <span class="font-mono {% if account_name is defined and posting.account == account_name %}font-bold text-gray-900 dark:text-white{% endif %}">{{ posting.amount }}</span>
+                                </div>
+                            {% endfor %}
+                            
+                            <div class="mt-2 flex gap-2">
+                                <button class="text-gray-400 hover:text-blue-500 transition-colors"
+                                        title="Edit Transaction"
+                                        hx-get="/api/transactions/edit-form"
+                                        hx-vals='{"offset": {{ txn.offset }}, "length": {{ txn.length }}, "source_path": "{{ txn.source_path }}"}'
+                                        hx-target="#edit-modal-content"
+                                        onclick="document.getElementById('edit-modal').showModal()">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    </svg>
+                                </button>
+                                <button class="text-gray-400 hover:text-red-500 transition-colors"
+                                        title="Delete Transaction"
+                                        hx-post="/api/transactions/delete"
+                                        hx-vals='{"offset": {{ txn.offset }}, "length": {{ txn.length }}, "source_path": "{{ txn.source_path }}"}'
+                                        hx-confirm="Are you sure you want to delete this transaction?"
+                                        hx-target="#global-message-container"
+                                        hx-swap="innerHTML">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>

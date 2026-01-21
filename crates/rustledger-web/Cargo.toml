@@ -1,0 +1,29 @@
+[package]
+name = "rustledger-web"
+version = "0.1.0"
+edition = "2024"
+authors = ["Rustledger Contributors"]
+description = "Web UI for Rustledger"
+license = "GPL-3.0-only"
+
+[dependencies]
+rustledger-core = { path = "../rustledger-core" }
+rustledger-loader = { path = "../rustledger-loader" }
+rustledger-parser = { path = "../rustledger-parser" }
+rustledger-query = { path = "../rustledger-query" }
+
+axum = { version = "0.7", features = ["macros"] }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+anyhow = "1.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tera = "1"
+tower = "0.4"
+tower-http = { version = "0.5", features = ["fs", "trace"] }
+
+[[bin]]
+name = "rustledger-web"
+path = "src/main.rs"
