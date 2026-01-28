@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block title %}{{ account_name }} - Rustledger{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Account Header -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+                <!-- Breadcrumb -->
+                <nav class="flex text-sm text-gray-500 dark:text-gray-400 mb-2" aria-label="Breadcrumb">
+                    <ol class="inline-flex items-center space-x-1">
+                        {% set parts = account_name | split(pat=":") %}
+                        {% set accumulated = "" %}
+                        {% for part in parts %}
+                            {% if accumulated == "" %}
+                                {% set_global accumulated = part %}
+                            {% else %}
+                                {% set_global accumulated = accumulated ~ ":" ~ part %}
+                            {% endif %}
+                            <li class="inline-flex items-center">
+                                {% if not loop.first %}
+                                    <svg class="w-4 h-4 mx-1 text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"></path>
+                                    </svg>
+                                {% endif %}
+                                <a href="/accounts/{{ accumulated }}" class="hover:text-primary {% if loop.last %}font-medium text-gray-900 dark:text-white{% endif %}">
+                                    {{ part }}
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ol>
+                </nav>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">{{ account_name }}</h1>
+                <p class="text-gray-600 dark:text-gray-400 mt-1">
+                    {% if is_exact_account %}
+                        Account
+                    {% else %}
+                        Account Group ({{ sub_accounts | length }} accounts)
+                    {% endif %}
+                </p>
+            </div>
+            
+            <!-- Balance Display -->
+            <div class="text-right">
+                {% for balance in balances %}
+                    <div class="text-2xl font-bold {% if balance is starting_with('-') %}text-red-600{% else %}text-green-600{% endif %}">
+                        {{ balance }}
+                    </div>
+                {% else %}
+                    <div class="text-2xl font-bold text-gray-400">No balance</div>
+                {% endfor %}
+                <p class="text-sm text-gray-500 dark:text-gray-400">Current Balance</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sub-accounts (if any) -->
+    {% if has_sub_accounts %}
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Sub-accounts</h2>
+        </div>
+        <div class="divide-y divide-gray-200 dark:divide-gray-700">
+            {% for sub in sub_accounts %}
+                {% if sub != account_name %}
+                <a href="/accounts/{{ sub }}" class="block px-6 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-medium text-gray-900 dark:text-white">{{ sub }}</span>
+                        <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </div>
+                </a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Transactions -->
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+                Transactions
+                <span class="text-sm font-normal text-gray-500">({{ transaction_count }})</span>
+            </h2>
+            <a href="/add" class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-blue-600 transition-colors">
+                <svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add
+            </a>
+        </div>
+        
+        {% if transactions | length > 0 %}
+        <div class="overflow-x-auto">
+            <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead class="bg-gray-50 dark:bg-gray-700/50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Date</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Description</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Account</th>
+                        <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Amount</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                    {% for txn in transactions %}
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                            {{ txn.date }}
+                        </td>
+                        <td class="px-6 py-4">
+                            <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                {% if txn.payee %}{{ txn.payee }}{% endif %}
+                            </div>
+                            <div class="text-sm text-gray-500 dark:text-gray-400">{{ txn.narration }}</div>
+                        </td>
+                        <td class="px-6 py-4">
+                            {% for posting in txn.postings %}
+                                <div class="text-sm {% if posting.account == account_name %}font-medium text-primary{% else %}text-gray-600 dark:text-gray-300{% endif %}">
+                                    <a href="/accounts/{{ posting.account }}" class="hover:underline">{{ posting.account }}</a>
+                                </div>
+                            {% endfor %}
+                        </td>
+                        <td class="px-6 py-4 text-right">
+                            {% for posting in txn.postings %}
+                                {% if posting.account == account_name or posting.account is starting_with(account_name ~ ":") %}
+                                    <div class="text-sm font-medium {% if posting.amount is starting_with('-') %}text-red-600{% else %}text-green-600{% endif %}">
+                                        {{ posting.amount }}
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="px-6 py-12 text-center">
+            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No transactions</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                No transactions found for this account.
+            </p>
+            <div class="mt-6">
+                <a href="/add" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-600">
+                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add Transaction
+                </a>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

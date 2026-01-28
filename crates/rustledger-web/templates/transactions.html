@@ -1,9 +1,56 @@
-<div class="bg-white shadow rounded-lg dark:bg-gray-800 mb-8">
-    <div class="px-4 py-5 border-b border-gray-200 sm:px-6 dark:border-gray-700">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">Transactions</h3>
+{% extends "base.html" %}
+
+{% block title %}Transactions - Rustledger{% endblock title %}
+
+{% block content %}
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Transactions</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">View and manage all your transactions</p>
     </div>
+    <a href="/add" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
+        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+        </svg>
+        Add Transaction
+    </a>
+</div>
+
+<!-- Search and Filters -->
+<div class="bg-white shadow rounded-lg dark:bg-gray-800 mb-6">
+    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex flex-col sm:flex-row gap-4">
+            <div class="flex-1">
+                <label for="search" class="sr-only">Search</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                    </div>
+                    <input type="text" id="search" placeholder="Search transactions..." 
+                           class="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary sm:text-sm"
+                           onkeyup="filterTransactions(this.value)">
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <select id="account-filter" 
+                        class="block w-full sm:w-auto pl-3 pr-10 py-2 text-base border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-primary focus:border-primary sm:text-sm rounded-md"
+                        onchange="filterByAccount(this.value)">
+                    <option value="">All Accounts</option>
+                    {% for account in accounts %}
+                    <option value="{{ account }}">{{ account }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Transactions List -->
+<div class="bg-white shadow rounded-lg dark:bg-gray-800">
     <div class="overflow-x-auto">
-        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" id="transactions-table">
             <thead class="bg-gray-50 dark:bg-gray-700">
                 <tr>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-300">Date</th>
@@ -14,12 +61,14 @@
             </thead>
             <tbody class="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                 {% for txn in transactions %}
-                <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 {% if txn.flag == '!' %}opacity-60 bg-gray-50 dark:bg-gray-900{% endif %}">
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transaction-row {% if txn.flag == '!' %}opacity-60 bg-gray-50 dark:bg-gray-900{% endif %}"
+                    data-payee="{{ txn.payee | lower }}" 
+                    data-narration="{{ txn.narration | lower }}"
+                    data-accounts="{% for p in txn.postings %}{{ p.account | lower }} {% endfor %}">
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                         {{ txn.date }}
                     </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                        {% if txn.line_number %}
                         <button class="cursor-pointer focus:outline-none hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full p-1 transition-colors" 
                                 title="{% if txn.flag == '*' %}Mark as Uncleared{% else %}Mark as Cleared{% endif %}"
                                 hx-post="/api/transactions/toggle-status"
@@ -35,23 +84,6 @@
                             </svg>
                             {% endif %}
                         </button>
-                        {% else %}
-                        <button class="cursor-pointer focus:outline-none hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full p-1 transition-colors" 
-                                title="{% if txn.flag == '*' %}Mark as Uncleared{% else %}Mark as Cleared{% endif %}"
-                                hx-post="/api/transactions/toggle-status"
-                                hx-vals='{"offset": {{ txn.offset }}, "source_path": "{{ txn.source_path }}"}'
-                                hx-swap="outerHTML">
-                            {% if txn.flag == '*' %}
-                            <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-                            </svg>
-                            {% else %}
-                            <svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            {% endif %}
-                        </button>
-                        {% endif %}
                     </td>
                     <td class="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                         {% if txn.payee %}
@@ -63,9 +95,9 @@
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-right dark:text-gray-400">
                         <div class="flex flex-col items-end gap-1">
                             {% for posting in txn.postings %}
-                                <div class="flex items-center gap-2 {% if account_name is defined and posting.account == account_name %}bg-yellow-50 dark:bg-yellow-900/20 px-1 rounded{% endif %}">
+                                <div class="flex items-center gap-2">
                                     <span class="text-xs text-gray-400 truncate max-w-[150px]">{{ posting.account }}</span>
-                                    <span class="font-mono {% if account_name is defined and posting.account == account_name %}font-bold text-gray-900 dark:text-white{% endif %}">{{ posting.amount }}</span>
+                                    <span class="font-mono">{{ posting.amount }}</span>
                                 </div>
                             {% endfor %}
                             
@@ -99,4 +131,57 @@
             </tbody>
         </table>
     </div>
+    
+    {% if transactions | length == 0 %}
+    <div class="text-center py-12">
+        <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No transactions</h3>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by creating a new transaction.</p>
+        <div class="mt-6">
+            <a href="/add" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-700">
+                <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+                Add Transaction
+            </a>
+        </div>
+    </div>
+    {% endif %}
 </div>
+
+<script>
+function filterTransactions(query) {
+    const rows = document.querySelectorAll('.transaction-row');
+    const lowerQuery = query.toLowerCase();
+    
+    rows.forEach(row => {
+        const payee = row.dataset.payee || '';
+        const narration = row.dataset.narration || '';
+        const accounts = row.dataset.accounts || '';
+        
+        if (payee.includes(lowerQuery) || narration.includes(lowerQuery) || accounts.includes(lowerQuery)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function filterByAccount(account) {
+    const rows = document.querySelectorAll('.transaction-row');
+    const lowerAccount = account.toLowerCase();
+    
+    rows.forEach(row => {
+        const accounts = row.dataset.accounts || '';
+        
+        if (!account || accounts.includes(lowerAccount)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+</script>
+{% endblock content %}

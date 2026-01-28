@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block title %}Add Transaction - Rustledger{% endblock title %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Add Transaction</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create a new transaction in your ledger</p>
+    </div>
+
+    <div class="bg-white shadow-lg rounded-xl dark:bg-gray-800 overflow-hidden">
+        <div class="p-6 sm:p-8">
+            <form id="add-txn-form" hx-post="/api/transactions" hx-swap="none" class="space-y-6">
+                <!-- Date and Status Row -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                    <div class="sm:col-span-2">
+                        <label for="date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Date
+                        </label>
+                        <input type="date" name="date" id="date" required 
+                               class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white p-3 border">
+                        <script>document.getElementById('date').valueAsDate = new Date();</script>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            Status
+                        </label>
+                        <div class="flex items-center h-12 gap-4">
+                            <label class="inline-flex items-center cursor-pointer">
+                                <input type="radio" name="status" value="cleared" class="sr-only peer" checked>
+                                <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                                <span class="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">Cleared</span>
+                            </label>
+                            <input type="hidden" name="cleared" id="cleared-input" value="on">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Payee -->
+                <div>
+                    <label for="payee" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Payee <span class="text-gray-400 font-normal">(optional)</span>
+                    </label>
+                    <div class="relative">
+                        <input type="text" name="payee" id="payee" 
+                               placeholder="e.g. Supermarket, Restaurant, Amazon"
+                               autocomplete="off"
+                               list="payee-list"
+                               class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white p-3 border">
+                        <datalist id="payee-list">
+                            {% for payee in payees %}
+                            <option value="{{ payee }}">
+                            {% endfor %}
+                        </datalist>
+                    </div>
+                    <!-- Recent payees quick select -->
+                    {% if payees | length > 0 %}
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        {% for payee in payees | slice(end=8) %}
+                        <button type="button" onclick="document.getElementById('payee').value='{{ payee }}'" 
+                                class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors">
+                            {{ payee }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Narration -->
+                <div>
+                    <label for="narration" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Narration <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" name="narration" id="narration" required
+                           placeholder="Description of the transaction"
+                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-primary focus:ring-primary text-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white p-3 border">
+                </div>
+
+                <!-- Postings Section -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-medium text-gray-900 dark:text-white">Postings</h3>
+                        <button type="button" onclick="addPosting()" 
+                                class="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600">
+                            <svg class="-ml-0.5 mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Row
+                        </button>
+                    </div>
+                    
+                    <div id="postings-container" class="space-y-4">
+                        <!-- Posting 1 -->
+                        <div class="posting-row flex flex-col sm:flex-row items-start gap-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-lg border-l-4 border-blue-500">
+                            <div class="flex-1 w-full">
+                                <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Account</label>
+                                <input type="text" name="account_1" list="accounts-list" required
+                                       placeholder="e.g. Expenses:Food"
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                            </div>
+                            <div class="w-full sm:w-48">
+                                <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Amount</label>
+                                <input type="text" name="amount_1" placeholder="-50.00 USD"
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border font-mono">
+                            </div>
+                        </div>
+
+                        <!-- Posting 2 -->
+                        <div class="posting-row flex flex-col sm:flex-row items-start gap-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-lg border-l-4 border-green-500">
+                            <div class="flex-1 w-full">
+                                <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Account</label>
+                                <input type="text" name="account_2" list="accounts-list"
+                                       placeholder="e.g. Assets:Bank:Checking"
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                            </div>
+                            <div class="w-full sm:w-48">
+                                <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Amount</label>
+                                <input type="text" name="amount_2" placeholder="50.00 USD (or leave blank)"
+                                       class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border font-mono">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <datalist id="accounts-list">
+                        {% for account in accounts %}
+                        <option value="{{ account }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+
+                <!-- Transaction Preview -->
+                <div class="border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">Preview</h3>
+                    <pre id="txn-preview" class="bg-gray-900 text-green-400 p-4 rounded-lg text-sm font-mono overflow-x-auto"></pre>
+                </div>
+
+                <!-- Actions -->
+                <div class="flex flex-col sm:flex-row gap-4 pt-4">
+                    <button type="submit" 
+                            class="flex-1 inline-flex justify-center items-center py-3 px-6 border border-transparent shadow-sm text-base font-medium rounded-lg text-white bg-primary hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors">
+                        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        Save Transaction
+                    </button>
+                    <button type="button" onclick="resetForm()" 
+                            class="inline-flex justify-center items-center py-3 px-6 border border-gray-300 shadow-sm text-base font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
+                        Clear
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Success Toast Template -->
+<template id="success-toast">
+    <div class="fixed bottom-4 right-4 bg-green-500 text-white px-6 py-4 rounded-lg shadow-lg flex items-center gap-3 animate-slide-up">
+        <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        <span>Transaction saved successfully!</span>
+        <button onclick="this.parentElement.remove()" class="ml-2 hover:opacity-75">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
+    </div>
+</template>
+
+<style>
+@keyframes slide-up {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+.animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+}
+</style>
+
+<script>
+let postingCount = 2;
+
+function addPosting() {
+    postingCount++;
+    const container = document.getElementById('postings-container');
+    const colors = ['border-purple-500', 'border-orange-500', 'border-pink-500', 'border-cyan-500'];
+    const color = colors[(postingCount - 3) % colors.length];
+    
+    const row = document.createElement('div');
+    row.className = `posting-row flex flex-col sm:flex-row items-start gap-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-lg border-l-4 ${color}`;
+    row.innerHTML = `
+        <div class="flex-1 w-full">
+            <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Account</label>
+            <input type="text" name="account_${postingCount}" list="accounts-list"
+                   placeholder="Account name"
+                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+        </div>
+        <div class="w-full sm:w-48">
+            <label class="block text-xs font-medium text-gray-500 uppercase mb-1">Amount</label>
+            <input type="text" name="amount_${postingCount}" placeholder="Amount"
+                   class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border font-mono">
+        </div>
+        <button type="button" onclick="this.parentElement.remove(); updatePreview();" 
+                class="mt-6 sm:mt-0 sm:self-end p-2 text-gray-400 hover:text-red-500 transition-colors">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+        </button>
+    `;
+    container.appendChild(row);
+    
+    // Add event listeners for preview
+    row.querySelectorAll('input').forEach(input => {
+        input.addEventListener('input', updatePreview);
+    });
+}
+
+function updatePreview() {
+    const date = document.getElementById('date').value || 'YYYY-MM-DD';
+    const payee = document.getElementById('payee').value;
+    const narration = document.getElementById('narration').value || 'Description';
+    const cleared = document.querySelector('input[name="status"]:checked')?.value === 'cleared';
+    const flag = cleared ? '*' : '!';
+    
+    let preview = `${date} ${flag}`;
+    if (payee) {
+        preview += ` "${payee}"`;
+    }
+    preview += ` "${narration}"\n`;
+    
+    // Get all posting rows
+    const rows = document.querySelectorAll('.posting-row');
+    rows.forEach((row, index) => {
+        const account = row.querySelector(`input[name^="account"]`)?.value || '';
+        const amount = row.querySelector(`input[name^="amount"]`)?.value || '';
+        if (account) {
+            preview += `  ${account}`;
+            if (amount) {
+                preview += ` ${amount}`;
+            }
+            preview += '\n';
+        }
+    });
+    
+    document.getElementById('txn-preview').textContent = preview;
+}
+
+function resetForm() {
+    document.getElementById('add-txn-form').reset();
+    document.getElementById('date').valueAsDate = new Date();
+    
+    // Remove extra posting rows
+    const rows = document.querySelectorAll('.posting-row');
+    rows.forEach((row, index) => {
+        if (index > 1) row.remove();
+    });
+    postingCount = 2;
+    
+    updatePreview();
+}
+
+// Initialize preview on load
+document.addEventListener('DOMContentLoaded', () => {
+    updatePreview();
+    
+    // Add event listeners for preview updates
+    document.querySelectorAll('#add-txn-form input').forEach(input => {
+        input.addEventListener('input', updatePreview);
+    });
+    
+    // Handle form submission
+    document.getElementById('add-txn-form').addEventListener('htmx:afterRequest', (event) => {
+        if (event.detail.successful) {
+            // Show success toast
+            const template = document.getElementById('success-toast');
+            const toast = template.content.cloneNode(true);
+            document.body.appendChild(toast);
+            
+            // Auto-remove after 5 seconds
+            setTimeout(() => {
+                const toasts = document.querySelectorAll('.animate-slide-up');
+                toasts.forEach(t => t.remove());
+            }, 5000);
+            
+            // Reset form for next entry
+            resetForm();
+        }
+    });
+});
+</script>
+{% endblock content %}

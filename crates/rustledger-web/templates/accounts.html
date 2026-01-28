@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+
+{% block title %}Accounts - Rustledger{% endblock title %}
+
+{% block content %}
+<div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Accounts</h1>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your chart of accounts</p>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+    <!-- Open Account Form -->
+    <div class="bg-white shadow-lg rounded-xl dark:bg-gray-800 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+            <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Open Account</h3>
+        </div>
+        <div class="p-6">
+            <form hx-post="/api/accounts/open" hx-target="#open-result" hx-swap="innerHTML" class="space-y-4">
+                <div>
+                    <label for="open-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
+                    <input type="date" name="date" id="open-date" required
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                    <script>document.getElementById('open-date').valueAsDate = new Date();</script>
+                </div>
+                <div>
+                    <label for="open-account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Name</label>
+                    <input type="text" name="account" id="open-account" required
+                           placeholder="e.g., Assets:Bank:NewAccount"
+                           list="account-types-list"
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                    <datalist id="account-types-list">
+                        <option value="Assets:">
+                        <option value="Assets:Bank:">
+                        <option value="Assets:Cash">
+                        <option value="Liabilities:">
+                        <option value="Liabilities:Credit:">
+                        <option value="Income:">
+                        <option value="Expenses:">
+                        <option value="Equity:">
+                    </datalist>
+                </div>
+                <div>
+                    <label for="open-currencies" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Currencies <span class="text-gray-400 font-normal">(optional, comma-separated)</span>
+                    </label>
+                    <input type="text" name="currencies" id="open-currencies"
+                           placeholder="e.g., USD, HKD"
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                </div>
+                <button type="submit" 
+                        class="w-full inline-flex justify-center items-center py-2.5 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500">
+                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Open Account
+                </button>
+            </form>
+            <div id="open-result" class="mt-4"></div>
+        </div>
+    </div>
+
+    <!-- Close Account Form -->
+    <div class="bg-white shadow-lg rounded-xl dark:bg-gray-800 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+            <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+            <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Close Account</h3>
+        </div>
+        <div class="p-6">
+            <form hx-post="/api/accounts/close" hx-target="#close-result" hx-swap="innerHTML" class="space-y-4">
+                <div>
+                    <label for="close-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date</label>
+                    <input type="date" name="date" id="close-date" required
+                           class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                    <script>document.getElementById('close-date').valueAsDate = new Date();</script>
+                </div>
+                <div>
+                    <label for="close-account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account to Close</label>
+                    <select name="account" id="close-account" required
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
+                        <option value="">Select account...</option>
+                        {% for account in accounts %}
+                        <option value="{{ account }}">{{ account }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-3">
+                    <div class="flex">
+                        <svg class="h-5 w-5 text-yellow-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <p class="text-sm text-yellow-700 dark:text-yellow-300">
+                            Ensure the account has zero balance before closing.
+                        </p>
+                    </div>
+                </div>
+                <button type="submit" 
+                        class="w-full inline-flex justify-center items-center py-2.5 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Close Account
+                </button>
+            </form>
+            <div id="close-result" class="mt-4"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Existing Accounts List -->
+<div class="bg-white shadow-lg rounded-xl dark:bg-gray-800 overflow-hidden">
+    <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Accounts ({{ accounts | length }})</h3>
+    </div>
+    <div class="p-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {% for account in accounts %}
+            <div class="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-750 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <div class="w-2 h-2 rounded-full 
+                    {% if account is starting_with("Assets:") %}bg-green-500
+                    {% elif account is starting_with("Liabilities:") %}bg-red-500
+                    {% elif account is starting_with("Income:") %}bg-blue-500
+                    {% elif account is starting_with("Expenses:") %}bg-orange-500
+                    {% else %}bg-purple-500{% endif %}">
+                </div>
+                <span class="text-sm font-medium text-gray-900 dark:text-white truncate" title="{{ account }}">
+                    {{ account }}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Keyboard shortcut: Ctrl+Shift+O to focus open account form
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.shiftKey && e.key === 'O') {
+        e.preventDefault();
+        document.getElementById('open-account').focus();
+    }
+});
+</script>
+{% endblock content %}

@@ -77,7 +77,7 @@ impl SourceFile {
 }
 
 /// A map of source files for error reporting.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct SourceMap {
     files: Vec<SourceFile>,
 }

@@ -9,6 +9,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <!-- ECharts for visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
     <script>
         // Check system preference for dark mode
         if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
@@ -45,7 +47,7 @@
         <!-- Sidebar -->
         <aside id="sidebar" class="fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex flex-col dark:bg-gray-800 dark:border-gray-700 transform transition-transform duration-300 -translate-x-full md:relative md:translate-x-0 shadow-lg md:shadow-none">
             <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-                <h1 class="text-2xl font-bold text-primary tracking-tight">Rustledger</h1>
+                <a href="/" class="text-2xl font-bold text-primary tracking-tight hover:opacity-80 transition-opacity">Rustledger</a>
                 <button class="md:hidden text-gray-500 hover:text-gray-700 dark:text-gray-400" onclick="toggleSidebar()">
                     <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -55,16 +57,40 @@
             <nav class="flex-1 overflow-y-auto py-4">
                 <ul class="space-y-1 px-3">
                     <li>
-                        <a href="/" class="flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50 group text-gray-700 hover:text-primary dark:text-gray-200 dark:hover:bg-gray-700">
-                            <svg class="mr-3 h-5 w-5 text-gray-400 group-hover:text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <a href="/" class="flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50 group {% if current_page == 'dashboard' %}bg-blue-50 text-primary dark:bg-gray-700{% else %}text-gray-700 hover:text-primary dark:text-gray-200{% endif %} dark:hover:bg-gray-700">
+                            <svg class="mr-3 h-5 w-5 {% if current_page == 'dashboard' %}text-primary{% else %}text-gray-400 group-hover:text-primary{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
                             </svg>
                             Dashboard
                         </a>
                     </li>
+                    <li>
+                        <a href="/transactions" class="flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50 group {% if current_page == 'transactions' %}bg-blue-50 text-primary dark:bg-gray-700{% else %}text-gray-700 hover:text-primary dark:text-gray-200{% endif %} dark:hover:bg-gray-700">
+                            <svg class="mr-3 h-5 w-5 {% if current_page == 'transactions' %}text-primary{% else %}text-gray-400 group-hover:text-primary{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            Transactions
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/add" class="flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50 group {% if current_page == 'add' %}bg-blue-50 text-primary dark:bg-gray-700{% else %}text-gray-700 hover:text-primary dark:text-gray-200{% endif %} dark:hover:bg-gray-700">
+                            <svg class="mr-3 h-5 w-5 {% if current_page == 'add' %}text-primary{% else %}text-gray-400 group-hover:text-primary{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                            </svg>
+                            Add Transaction
+                        </a>
+                    </li>
+                    <li>
+                        <a href="/accounts" class="flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-gray-50 group {% if current_page == 'accounts' %}bg-blue-50 text-primary dark:bg-gray-700{% else %}text-gray-700 hover:text-primary dark:text-gray-200{% endif %} dark:hover:bg-gray-700">
+                            <svg class="mr-3 h-5 w-5 {% if current_page == 'accounts' %}text-primary{% else %}text-gray-400 group-hover:text-primary{% endif %}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            Manage Accounts
+                        </a>
+                    </li>
                     
                     <li class="pt-4 pb-2 px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider dark:text-gray-400">
-                        Accounts
+                        Account Tree
                     </li>
                     
                     {% if account_tree is defined %}
@@ -119,6 +145,36 @@
                 }, 300); // Match transition duration
             }
         }
+        
+        // Global keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Don't trigger if user is typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+            
+            // 'n' or Ctrl+N: New transaction
+            if (e.key === 'n' || (e.ctrlKey && e.key === 'n')) {
+                e.preventDefault();
+                window.location.href = '/add';
+            }
+            // 't': Transactions
+            else if (e.key === 't') {
+                window.location.href = '/transactions';
+            }
+            // 'd': Dashboard
+            else if (e.key === 'd') {
+                window.location.href = '/';
+            }
+            // 'a': Accounts
+            else if (e.key === 'a') {
+                window.location.href = '/accounts';
+            }
+            // '?': Show keyboard shortcuts help
+            else if (e.key === '?') {
+                alert('Keyboard Shortcuts:\n\nn - New Transaction\nt - Transactions\nd - Dashboard\na - Accounts\n? - Show this help');
+            }
+        });
     </script>
 
     <!-- Global Modal Container -->

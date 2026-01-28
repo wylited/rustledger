@@ -10,16 +10,10 @@
     </div>
     
     <div class="p-6 space-y-6">
-        {% if postings|length > 2 %}
-        <div class="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded text-sm mb-4">
-            Warning: This transaction has {{ postings|length }} postings. The simple editor only supports editing the first 2. Additional postings will be lost upon save.
-        </div>
-        {% endif %}
-        
         <form hx-post="/api/transactions/update" hx-swap="outerHTML" class="space-y-6">
-            <input type="hidden" name="original_offset" value="{{ offset }}">
-            <input type="hidden" name="original_length" value="{{ length }}">
-            <input type="hidden" name="original_source_path" value="{{ source_path }}">
+            <input type="hidden" name="original_offset" value="{{ original_offset }}">
+            <input type="hidden" name="original_length" value="{{ original_length }}">
+            <input type="hidden" name="original_source_path" value="{{ original_source_path }}">
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
@@ -27,23 +21,22 @@
                     <input type="date" name="date" id="edit-date" value="{{ date }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-600 dark:border-gray-500 dark:text-white p-2 border">
                 </div>
                 
-                <div>
-                    <label for="edit-payee" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Payee</label>
-                    <input type="text" name="payee" id="edit-payee" value="{{ payee }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-600 dark:border-gray-500 dark:text-white p-2 border">
+                <div class="flex items-center pt-6">
+                    <input type="checkbox" name="cleared" id="edit-cleared" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" {% if cleared %}checked{% endif %}>
+                    <label for="edit-cleared" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
+                        Cleared (*)
+                    </label>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
+                    <label for="edit-payee" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Payee</label>
+                    <input type="text" list="payees-list" name="payee" id="edit-payee" value="{{ payee }}" placeholder="Optional" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-600 dark:border-gray-500 dark:text-white p-2 border">
+                </div>
+                <div>
                     <label for="edit-narration" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Narration</label>
                     <input type="text" name="narration" id="edit-narration" value="{{ narration }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-600 dark:border-gray-500 dark:text-white p-2 border">
-                </div>
-                
-                <div class="flex items-center pt-6">
-                    <input type="checkbox" name="cleared" id="edit-cleared" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" {% if flag == '*' %}checked{% endif %}>
-                    <label for="edit-cleared" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                        Cleared (*)
-                    </label>
                 </div>
             </div>
 
@@ -55,11 +48,11 @@
                     <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-600 rounded-md">
                         <div class="flex-1">
                             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Account</label>
-                            <input type="text" list="accounts-list" name="account_1" value="{{ postings[0].account }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
+                            <input type="text" list="accounts-list" name="account_1" value="{{ account_1 }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
                         </div>
                         <div class="w-1/3">
                             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</label>
-                            <input type="text" name="amount_1" value="{{ postings[0].amount }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
+                            <input type="text" name="amount_1" value="{{ amount_1 }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
                         </div>
                     </div>
 
@@ -67,11 +60,11 @@
                     <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-600 rounded-md">
                         <div class="flex-1">
                             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Account</label>
-                            <input type="text" list="accounts-list" name="account_2" value="{% if postings|length > 1 %}{{ postings[1].account }}{% endif %}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
+                            <input type="text" list="accounts-list" name="account_2" value="{{ account_2 }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
                         </div>
                         <div class="w-1/3">
                             <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Amount</label>
-                            <input type="text" name="amount_2" value="{% if postings|length > 1 %}{{ postings[1].amount }}{% endif %}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
+                            <input type="text" name="amount_2" value="{{ amount_2 }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-500 dark:border-gray-400 dark:text-white p-2 border">
                         </div>
                     </div>
                 </div>
@@ -88,6 +81,11 @@
         <datalist id="accounts-list">
             {% for account in accounts %}
             <option value="{{ account }}">
+            {% endfor %}
+        </datalist>
+        <datalist id="payees-list">
+            {% for p in payees %}
+            <option value="{{ p }}">
             {% endfor %}
         </datalist>
     </div>
