@@ -103,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
         )
         .with_state(state);
 
-    let addr = SocketAddr::from(([127, 0, 0, 1], args.port));
+    let addr = SocketAddr::from(([0, 0, 0, 0], args.port));
     println!("Listening on http://{}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;

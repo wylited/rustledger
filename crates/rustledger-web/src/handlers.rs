@@ -60,6 +60,27 @@ fn validate_path(source_path: &str, ledger_path: &Path) -> Result<PathBuf, &'sta
     Ok(canonical_source)
 }
 
+/// Determines the target file for a transaction based on its date.
+/// Checks if a partitioned file (yy-mm.beancount) exists.
+fn determine_target_file(ledger_path: &Path, date: &str) -> PathBuf {
+    if date.len() < 7 {
+        return ledger_path.to_path_buf();
+    }
+    
+    let yy = &date[2..4];
+    let mm = &date[5..7];
+    let partition_filename = format!("{}-{}.beancount", yy, mm);
+    
+    let ledger_dir = ledger_path.parent().unwrap_or(Path::new("."));
+    let partition_path = ledger_dir.join(&partition_filename);
+    
+    if partition_path.exists() {
+        partition_path
+    } else {
+        ledger_path.to_path_buf()
+    }
+}
+
 /// Helper function to load the ledger with caching.
 /// Uses RwLock to allow concurrent reads, only reloads when cache is invalidated.
 async fn load_ledger(state: &Arc<AppState>) -> anyhow::Result<LoadResult> {
@@ -279,8 +300,10 @@ pub async fn create_transaction(
     // Acquire write lock to serialize file modifications
     let _write_guard = state.write_lock.lock().await;
 
+    let target_path = determine_target_file(&state.ledger_path, &payload.date);
+
     // Append to file
-    let mut file = match OpenOptions::new().append(true).open(&state.ledger_path) {
+    let mut file = match OpenOptions::new().append(true).open(&target_path) {
         Ok(f) => f,
         Err(e) => {
             return Html(format!(
@@ -1089,4 +1112,40 @@ pub async fn account_detail(
     };
 
     Html(rendered)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::{self, File};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn test_determine_target_file() {
+        // Create a unique temp dir
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("rustledger_test_{}", timestamp));
+        fs::create_dir_all(&dir).unwrap();
+
+        let main_ledger = dir.join("main.beancount");
+        File::create(&main_ledger).unwrap();
+
+        // Case 1: No partition file exists -> fallback to main
+        let target = determine_target_file(&main_ledger, "2026-01-15");
+        assert_eq!(target, main_ledger);
+
+        // Case 2: Partition file exists -> use it
+        let partition_file = dir.join("26-01.beancount");
+        File::create(&partition_file).unwrap();
+        
+        let target = determine_target_file(&main_ledger, "2026-01-15");
+        assert_eq!(target, partition_file);
+
+        // Case 3: Different month -> fallback to main (since file doesn't exist)
+        let target = determine_target_file(&main_ledger, "2026-02-15");
+        assert_eq!(target, main_ledger);
+        
+        // Cleanup
+        let _ = fs::remove_dir_all(dir);
+    }
 }
