@@ -81,6 +81,19 @@ fn determine_target_file(ledger_path: &Path, date: &str) -> PathBuf {
     }
 }
 
+/// Determines the target file for account operations (open/close).
+/// Checks if accounts.beancount exists.
+fn determine_accounts_file(ledger_path: &Path) -> PathBuf {
+    let ledger_dir = ledger_path.parent().unwrap_or(Path::new("."));
+    let accounts_path = ledger_dir.join("accounts.beancount");
+    
+    if accounts_path.exists() {
+        accounts_path
+    } else {
+        ledger_path.to_path_buf()
+    }
+}
+
 /// Helper function to load the ledger with caching.
 /// Uses RwLock to allow concurrent reads, only reloads when cache is invalidated.
 async fn load_ledger(state: &Arc<AppState>) -> anyhow::Result<LoadResult> {
@@ -944,8 +957,10 @@ pub async fn open_account(
     // Acquire write lock to serialize file modifications
     let _write_guard = state.write_lock.lock().await;
 
+    let target_path = determine_accounts_file(&state.ledger_path);
+
     // Append to ledger file
-    let mut file = match OpenOptions::new().append(true).open(&state.ledger_path) {
+    let mut file = match OpenOptions::new().append(true).open(&target_path) {
         Ok(f) => f,
         Err(e) => {
             return Html(format!(
@@ -998,8 +1013,10 @@ pub async fn close_account(
     // Acquire write lock to serialize file modifications
     let _write_guard = state.write_lock.lock().await;
 
+    let target_path = determine_accounts_file(&state.ledger_path);
+
     // Append to ledger file
-    let mut file = match OpenOptions::new().append(true).open(&state.ledger_path) {
+    let mut file = match OpenOptions::new().append(true).open(&target_path) {
         Ok(f) => f,
         Err(e) => {
             return Html(format!(
@@ -1144,6 +1161,31 @@ mod tests {
         // Case 3: Different month -> fallback to main (since file doesn't exist)
         let target = determine_target_file(&main_ledger, "2026-02-15");
         assert_eq!(target, main_ledger);
+        
+        // Cleanup
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn test_determine_accounts_file() {
+        // Create a unique temp dir
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+        let dir = std::env::temp_dir().join(format!("rustledger_test_acc_{}", timestamp));
+        fs::create_dir_all(&dir).unwrap();
+
+        let main_ledger = dir.join("main.beancount");
+        File::create(&main_ledger).unwrap();
+
+        // Case 1: No accounts file exists -> fallback to main
+        let target = determine_accounts_file(&main_ledger);
+        assert_eq!(target, main_ledger);
+
+        // Case 2: Accounts file exists -> use it
+        let accounts_file = dir.join("accounts.beancount");
+        File::create(&accounts_file).unwrap();
+        
+        let target = determine_accounts_file(&main_ledger);
+        assert_eq!(target, accounts_file);
         
         // Cleanup
         let _ = fs::remove_dir_all(dir);
