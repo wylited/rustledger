@@ -1,0 +1,218 @@
+<div class="bg-white rounded-xl shadow-xl dark:bg-gray-800 max-w-2xl mx-auto">
+    <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center gap-3">
+            <div class="bg-green-100 dark:bg-green-900/30 rounded-full p-2">
+                <svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                </svg>
+            </div>
+            <div>
+                <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Open New Account</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400">Create a new account with optional opening balance</p>
+            </div>
+        </div>
+    </div>
+    
+    <div class="p-6">
+        <form hx-post="/api/accounts/open" hx-target="#open-result" hx-swap="innerHTML">
+            <!-- Date -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Opening Date *</label>
+                <input type="date" name="date" id="open-date" required
+                       class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-green-500 focus:ring-green-500">
+            </div>
+            
+            <!-- Account Templates -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Quick Templates</label>
+                <div class="flex flex-wrap gap-2">
+                    <button type="button" onclick="applyTemplate('bank')" class="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 rounded-lg text-sm hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors">Bank Account</button>
+                    <button type="button" onclick="applyTemplate('cash')" class="px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm hover:bg-green-100 dark:hover:bg-green-900/40 transition-colors">Cash</button>
+                    <button type="button" onclick="applyTemplate('credit')" class="px-3 py-1.5 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg text-sm hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors">Credit Card</button>
+                    <button type="button" onclick="applyTemplate('expense')" class="px-3 py-1.5 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-lg text-sm hover:bg-orange-100 dark:hover:bg-orange-900/40 transition-colors">Expense Category</button>
+                    <button type="button" onclick="applyTemplate('income')" class="px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 rounded-lg text-sm hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-colors">Income Source</button>
+                </div>
+            </div>
+            
+            <!-- Account Name -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Account Name *</label>
+                <input type="text" name="account" id="open-account" required
+                       placeholder="e.g., Assets:Bank:Chase Checking"
+                       pattern="(Assets|Liabilities|Equity|Income|Expenses):[A-Za-z0-9_:]+"
+                       class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-green-500 focus:ring-green-500 font-mono"
+                       oninput="updateAccountPreview()">
+                <p class="mt-1 text-xs text-gray-500">Format: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">Type:Category:Name</code></p>
+            </div>
+            
+            <!-- Parent Account Suggestion (shown dynamically) -->
+            <div id="parent-suggestion" class="hidden mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <span class="text-sm text-blue-700 dark:text-blue-300">Suggested parent: <strong id="parent-name"></strong></span>
+                <button type="button" onclick="useParent()" class="ml-2 text-xs text-blue-600 hover:underline">Use</button>
+            </div>
+            
+            <!-- Currencies -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Currencies</label>
+                <input type="text" name="currencies" id="open-currencies"
+                       placeholder="USD, EUR (optional)"
+                       class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-green-500 focus:ring-green-500">
+            </div>
+            
+            <!-- Opening Balance Toggle -->
+            <div class="mb-4">
+                <label class="flex items-center cursor-pointer">
+                    <input type="checkbox" id="has-opening-balance" onchange="toggleOpeningBalance()" class="sr-only peer">
+                    <div class="relative w-11 h-6 bg-gray-200 peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
+                    <span class="ml-3 text-sm font-medium text-gray-700 dark:text-gray-300">Add Opening Balance</span>
+                </label>
+            </div>
+            
+            <!-- Opening Balance Fields (hidden by default) -->
+            <div id="opening-balance-fields" class="hidden mb-4 space-y-3 p-4 bg-gray-50 dark:bg-gray-750 rounded-lg">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Balance Amount</label>
+                        <input type="text" name="opening_balance" id="opening-balance"
+                               placeholder="e.g., 1000.00 USD"
+                               class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-green-500 focus:ring-green-500 font-mono"
+                               oninput="updateAccountPreview()">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Note</label>
+                        <input type="text" name="opening_balance_note" id="opening-balance-note"
+                               placeholder="Opening balance"
+                               class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-green-500 focus:ring-green-500">
+                    </div>
+                </div>
+                
+                <!-- Visual Diagram -->
+                <div class="mt-3 p-3 bg-white dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600">
+                    <p class="text-xs text-gray-500 mb-2">Transaction preview:</p>
+                    <div class="flex items-center justify-center gap-2 text-sm">
+                        <div id="diagram-left" class="px-3 py-2 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded font-mono">New Account</div>
+                        <div class="text-gray-400">←</div>
+                        <div id="diagram-amount" class="px-3 py-2 bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 rounded font-mono font-bold">0.00 USD</div>
+                        <div class="text-gray-400">→</div>
+                        <div class="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 rounded font-mono">Equity:Opening-Balances</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Beancount Preview -->
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preview</label>
+                <pre id="account-preview" class="bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto"></pre>
+            </div>
+            
+            <!-- Actions -->
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="document.getElementById('open-account-modal')?.close()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                <button type="submit" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Open Account
+                </button>
+            </div>
+        </form>
+        <div id="open-result" class="mt-4"></div>
+    </div>
+</div>
+
+<script>
+// Set today's date
+document.getElementById('open-date').valueAsDate = new Date();
+
+const templates = {
+    bank: { prefix: 'Assets:Bank:', currencies: 'USD' },
+    cash: { prefix: 'Assets:Cash:', currencies: 'USD' },
+    credit: { prefix: 'Liabilities:Credit:', currencies: 'USD' },
+    expense: { prefix: 'Expenses:', currencies: 'USD' },
+    income: { prefix: 'Income:', currencies: 'USD' }
+};
+
+function applyTemplate(type) {
+    const t = templates[type];
+    document.getElementById('open-account').value = t.prefix;
+    document.getElementById('open-currencies').value = t.currencies;
+    document.getElementById('open-account').focus();
+    updateAccountPreview();
+}
+
+function toggleOpeningBalance() {
+    const checkbox = document.getElementById('has-opening-balance');
+    const fields = document.getElementById('opening-balance-fields');
+    fields.classList.toggle('hidden', !checkbox.checked);
+    updateAccountPreview();
+}
+
+function updateAccountPreview() {
+    const date = document.getElementById('open-date')?.value || 'YYYY-MM-DD';
+    const account = document.getElementById('open-account')?.value || 'NewAccount';
+    const currencies = document.getElementById('open-currencies')?.value || '';
+    const hasBalance = document.getElementById('has-opening-balance')?.checked;
+    const balance = document.getElementById('opening-balance')?.value || '0.00 USD';
+    const note = document.getElementById('opening-balance-note')?.value || 'Opening balance';
+    
+    // Update diagram
+    if (hasBalance) {
+        document.getElementById('diagram-left').textContent = account.split(':').pop() || 'Account';
+        document.getElementById('diagram-amount').textContent = balance;
+    }
+    
+    // Build preview
+    let preview = '';
+    
+    // Open directive
+    preview += date + ' open ' + account;
+    if (currencies) preview += ' ' + currencies;
+    preview += '\n\n';
+    
+    // Opening balance transaction
+    if (hasBalance && balance) {
+        const parts = balance.trim().split(/\s+/);
+        const amount = parts[0] || '0.00';
+        const commodity = parts[1] || 'USD';
+        
+        preview += date + ' * "" "' + note + '"\n';
+        preview += '  ' + account + '  ' + amount + ' ' + commodity + '\n';
+        
+        // Determine equity amount sign
+        const numAmount = parseFloat(amount) || 0;
+        let equityAmount = '';
+        if (account.startsWith('Assets:') || account.startsWith('Expenses:')) {
+            equityAmount = (-numAmount) + ' ' + commodity;
+        } else {
+            equityAmount = (numAmount > 0 ? '-' : '') + Math.abs(numAmount) + ' ' + commodity;
+        }
+        preview += '  Equity:Opening-Balances  ' + equityAmount + '\n';
+    }
+    
+    document.getElementById('account-preview').textContent = preview;
+    
+    // Show parent suggestion
+    if (account && account.includes(':')) {
+        const parts = account.split(':');
+        if (parts.length > 1) {
+            const parent = parts.slice(0, -1).join(':');
+            document.getElementById('parent-name').textContent = parent;
+            document.getElementById('parent-suggestion').classList.remove('hidden');
+        }
+    }
+}
+
+function useParent() {
+    const parent = document.getElementById('parent-name').textContent;
+    const current = document.getElementById('open-account').value;
+    const parts = current.split(':');
+    document.getElementById('open-account').value = parent + ':' + parts.pop();
+    updateAccountPreview();
+}
+
+// Initialize
+document.getElementById('open-account')?.addEventListener('input', updateAccountPreview);
+document.getElementById('opening-balance')?.addEventListener('input', updateAccountPreview);
+document.getElementById('opening-balance-note')?.addEventListener('input', updateAccountPreview);
+updateAccountPreview();
+</script>

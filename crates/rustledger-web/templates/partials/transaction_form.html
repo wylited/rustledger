@@ -1,91 +1,252 @@
-<div class="bg-white shadow rounded-lg dark:bg-gray-800 mb-8 border-t-4 border-primary">
-    <div class="px-4 py-5 border-b border-gray-200 sm:px-6 dark:border-gray-700">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 dark:text-white">Add Transaction</h3>
-        {% if account_name is defined %}
-        <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Create a new transaction involving {{ account_name }}</p>
-        {% else %}
-        <p class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">Create a new transaction</p>
+{# Unified Transaction Form #}
+{% set is_edit = original_offset is defined %}
+<div class="bg-white rounded-xl shadow-xl dark:bg-gray-800 max-w-4xl {% if not is_edit %}mx-auto{% endif %}">
+    <div class="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-100 dark:bg-blue-900/30 rounded-full p-2">
+                <svg class="h-6 w-6 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    {% if is_edit %}
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    {% else %}
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    {% endif %}
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-900 dark:text-white">
+                {% if is_edit %}Edit Transaction{% else %}New Transaction{% endif %}
+            </h3>
+        </div>
+        {% if is_edit %}
+        <button type="button" onclick="document.getElementById('edit-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+        </button>
         {% endif %}
     </div>
-    <div class="px-4 py-5 sm:p-6">
-        <form class="space-y-6" hx-post="/api/transactions" hx-swap="none" id="txn-form" _="on htmx:afterRequest reset() me">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Date -->
-                <div>
-                    <label for="date" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                    <input type="date" name="date" id="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                    <script>
-                        document.getElementById('date').valueAsDate = new Date();
-                    </script>
+    
+    <div class="p-6 {% if is_edit %}max-h-[70vh] overflow-y-auto{% endif %}">
+        <form id="txn-form-{% if is_edit %}edit{% else %}add{% endif %}" 
+              hx-post="{% if is_edit %}/api/transactions/update{% else %}/api/transactions{% endif %}" 
+              hx-swap="{% if is_edit %}outerHTML{% else %}none{% endif %}">
+            
+            {% if is_edit %}
+            <input type="hidden" name="original_offset" value="{{ original_offset }}">
+            <input type="hidden" name="original_length" value="{{ original_length }}">
+            <input type="hidden" name="original_source_path" value="{{ original_source_path }}">
+            {% endif %}
+            
+            <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 mb-4">
+                <div class="sm:col-span-4">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Date *</label>
+                    <input type="date" name="date" id="date-{% if is_edit %}edit{% else %}add{% endif %}" required
+                           value="{% if is_edit %}{{ date }}{% endif %}"
+                           class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-blue-500 focus:ring-blue-500">
                 </div>
-                
-                <!-- Payee -->
-                <div>
-                    <label for="payee" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Payee (Optional)</label>
-                    <input type="text" name="payee" id="payee" placeholder="e.g. Supermarket" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
+                <div class="sm:col-span-3">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Status</label>
+                    <input type="hidden" name="cleared" id="cleared-{% if is_edit %}edit{% else %}add{% endif %}" value="{% if is_edit and cleared %}on{% endif %}">
+                    <button type="button" onclick="toggleStatus('{% if is_edit %}edit{% else %}add{% endif %}')" 
+                            id="status-btn-{% if is_edit %}edit{% else %}add{% endif %}"
+                            class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border transition-all {% if is_edit and cleared %}border-green-500 bg-green-50{% endif %}">
+                        <span id="status-dot-{% if is_edit %}edit{% else %}add{% endif %}">
+                            {% if is_edit and cleared %}
+                            <svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+                            {% else %}
+                            <svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            {% endif %}
+                        </span>
+                        <span id="status-text-{% if is_edit %}edit{% else %}add{% endif %}">{% if is_edit and cleared %}Cleared{% else %}Pending{% endif %}</span>
+                    </button>
+                </div>
+                <div class="sm:col-span-5">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Balance</label>
+                    <div id="balance-{% if is_edit %}edit{% else %}add{% endif %}" class="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm">
+                        <span class="text-gray-500">Enter amounts...</span>
+                    </div>
                 </div>
             </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Narration -->
-                <div>
-                    <label for="narration" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Narration</label>
-                    <input type="text" name="narration" id="narration" required placeholder="Description of the transaction" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                </div>
-                
-                <!-- Status -->
-                <div class="flex items-center pt-6">
-                    <input type="checkbox" name="cleared" id="cleared" class="h-4 w-4 text-primary focus:ring-primary border-gray-300 rounded" checked>
-                    <label for="cleared" class="ml-2 block text-sm text-gray-900 dark:text-gray-300">
-                        Cleared (*)
-                    </label>
-                </div>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Payee (optional)</label>
+                <input type="text" name="payee" id="payee-{% if is_edit %}edit{% else %}add{% endif %}"
+                       value="{% if is_edit %}{{ payee }}{% endif %}"
+                       list="payees-{% if is_edit %}edit{% else %}add{% endif %}"
+                       placeholder="e.g., Whole Foods"
+                       class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-blue-500 focus:ring-blue-500">
+                <datalist id="payees-{% if is_edit %}edit{% else %}add{% endif %}">
+                    {% for p in payees %}<option value="{{ p }}">{% endfor %}
+                </datalist>
             </div>
-
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Narration *</label>
+                <input type="text" name="narration" id="narration-{% if is_edit %}edit{% else %}add{% endif %}" required
+                       value="{% if is_edit %}{{ narration }}{% endif %}"
+                       placeholder="Description of transaction"
+                       class="block w-full rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            
             <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
-                <h4 class="text-sm font-medium text-gray-900 dark:text-white mb-4">Postings</h4>
-                
-                <div class="space-y-4">
-                    <!-- Posting 1 (Current Account) -->
-                    <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-md">
-                        <div class="flex-1">
-                            <label class="block text-xs font-medium text-gray-500 uppercase">Account</label>
-                            <select name="account_1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                                {% for account in accounts %}
-                                <option value="{{ account }}" {% if account_name is defined and account == account_name %}selected{% endif %}>{{ account }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="w-1/3">
-                            <label class="block text-xs font-medium text-gray-500 uppercase">Amount</label>
-                            <input type="text" name="amount_1" placeholder="-10.00 USD" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                        </div>
-                    </div>
-
-                    <!-- Posting 2 -->
-                    <div class="flex items-start gap-4 p-4 bg-gray-50 dark:bg-gray-750 rounded-md">
-                        <div class="flex-1">
-                            <label class="block text-xs font-medium text-gray-500 uppercase">Account</label>
-                            <select name="account_2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                                <option value="">Select Account...</option>
-                                {% for account in accounts %}
-                                <option value="{{ account }}">{{ account }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="w-1/3">
-                            <label class="block text-xs font-medium text-gray-500 uppercase">Amount</label>
-                            <input type="text" name="amount_2" placeholder="10.00 USD" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring-primary sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2 border">
-                        </div>
-                    </div>
+                <div class="flex items-center justify-between mb-3">
+                    <h4 class="text-lg font-medium text-gray-900 dark:text-white">Postings</h4>
+                    <button type="button" onclick="addPosting('{% if is_edit %}edit{% else %}add{% endif %}')" class="text-sm px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors">+ Add Posting</button>
                 </div>
+                
+                <div id="postings-{% if is_edit %}edit{% else %}add{% endif %}" class="space-y-2">
+                    {% if is_edit %}
+                    <div class="posting-row flex gap-2">
+                        <input type="text" name="account_1" value="{{ account_1 }}" list="accounts-{% if is_edit %}edit{% else %}add{% endif %}" required class="flex-1 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border" placeholder="Account">
+                        <input type="text" name="amount_1" value="{{ amount_1 }}" class="w-40 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border font-mono" placeholder="Amount">
+                    </div>
+                    <div class="posting-row flex gap-2">
+                        <input type="text" name="account_2" value="{{ account_2 }}" list="accounts-{% if is_edit %}edit{% else %}add{% endif %}" class="flex-1 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border" placeholder="Account">
+                        <input type="text" name="amount_2" value="{{ amount_2 }}" class="w-40 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border font-mono" placeholder="Amount">
+                    </div>
+                    {% else %}
+                    <div class="posting-row flex gap-2">
+                        <input type="text" name="account_1" list="accounts-add" required class="flex-1 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border" placeholder="Account">
+                        <input type="text" name="amount_1" class="w-40 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border font-mono" placeholder="Amount">
+                    </div>
+                    <div class="posting-row flex gap-2">
+                        <input type="text" name="account_2" list="accounts-add" class="flex-1 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border" placeholder="Account">
+                        <input type="text" name="amount_2" class="w-40 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border font-mono" placeholder="Amount">
+                    </div>
+                    {% endif %}
+                </div>
+                
+                <datalist id="accounts-{% if is_edit %}edit{% else %}add{% endif %}">
+                    {% for account in accounts %}<option value="{{ account }}">{% endfor %}
+                </datalist>
             </div>
-
-            <div class="flex justify-end pt-4">
-                <button type="submit" class="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-primary hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary">
-                    Post Transaction
-                </button>
+            
+            <div class="mt-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Preview</label>
+                <pre id="preview-{% if is_edit %}edit{% else %}add{% endif %}" class="bg-gray-900 text-green-400 p-3 rounded-lg text-sm font-mono overflow-x-auto"></pre>
+            </div>
+            
+            <div class="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                {% if is_edit %}
+                <button type="button" onclick="document.getElementById('edit-modal').close()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Cancel</button>
+                {% else %}
+                <button type="button" onclick="resetForm('add')" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">Clear</button>
+                {% endif %}
+                <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">{% if is_edit %}Update{% else %}Save{% endif %}</button>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+(function() {
+    const mode = '{% if is_edit %}edit{% else %}add{% endif %}';
+    if (mode === 'add') {
+        document.getElementById('date-add').valueAsDate = new Date();
+    }
+    updateTransactionPreview(mode);
+})();
+
+function toggleStatus(mode) {
+    const input = document.getElementById('cleared-' + mode);
+    const btn = document.getElementById('status-btn-' + mode);
+    const text = document.getElementById('status-text-' + mode);
+    const dot = document.getElementById('status-dot-' + mode);
+    const isCleared = input.value === 'on';
+    
+    if (isCleared) {
+        input.value = '';
+        text.textContent = 'Pending';
+        btn.classList.remove('border-green-500', 'bg-green-50');
+        dot.innerHTML = '<svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>';
+    } else {
+        input.value = 'on';
+        text.textContent = 'Cleared';
+        btn.classList.add('border-green-500', 'bg-green-50');
+        dot.innerHTML = '<svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>';
+    }
+    updateTransactionPreview(mode);
+}
+
+function addPosting(mode) {
+    const container = document.getElementById('postings-' + mode);
+    const row = document.createElement('div');
+    row.className = 'posting-row flex gap-2';
+    const idx = container.children.length + 1;
+    row.innerHTML = '<input type="text" name="account_' + idx + '" list="accounts-' + mode + '" class="flex-1 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border" placeholder="Account"><input type="text" name="amount_' + idx + '" class="w-40 rounded-lg border-gray-300 dark:bg-gray-700 dark:border-gray-600 p-2 border font-mono" placeholder="Amount"><button type="button" onclick="this.parentElement.remove(); updateTransactionPreview(\'' + mode + '\');" class="p-2 text-red-500 hover:bg-red-50 rounded-lg">×</button>';
+    container.appendChild(row);
+    row.querySelectorAll('input').forEach(i => i.addEventListener('input', () => updateTransactionPreview(mode)));
+}
+
+function updateTransactionPreview(mode) {
+    const date = document.getElementById('date-' + mode)?.value || 'YYYY-MM-DD';
+    const payee = document.getElementById('payee-' + mode)?.value || '';
+    const narration = document.getElementById('narration-' + mode)?.value || 'Description';
+    const cleared = document.getElementById('cleared-' + mode)?.value === 'on';
+    const flag = cleared ? '*' : '!';
+    
+    let text = date + ' ' + flag;
+    if (payee) text += ' "' + payee + '"';
+    text += ' "' + narration + '"\n';
+    
+    const container = document.getElementById('postings-' + mode);
+    container?.querySelectorAll('.posting-row').forEach(row => {
+        const acc = row.querySelector('input[name^="account"]')?.value || '';
+        const amt = row.querySelector('input[name^="amount"]')?.value || '';
+        if (acc) {
+            text += '  ' + acc;
+            if (amt) text += ' ' + amt;
+            text += '\n';
+        }
+    });
+    
+    const preview = document.getElementById('preview-' + mode);
+    if (preview) preview.textContent = text;
+    
+    checkBalance(mode);
+}
+
+function checkBalance(mode) {
+    const container = document.getElementById('postings-' + mode);
+    let total = 0;
+    let hasAmounts = false;
+    
+    container?.querySelectorAll('.posting-row').forEach(row => {
+        const amtStr = row.querySelector('input[name^="amount"]')?.value || '';
+        const match = amtStr.match(/(-?\d+\.?\d*)/);
+        if (match) {
+            total += parseFloat(match[1]);
+            hasAmounts = true;
+        }
+    });
+    
+    const indicator = document.getElementById('balance-' + mode);
+    if (!indicator) return;
+    
+    if (!hasAmounts) {
+        indicator.className = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-sm';
+        indicator.innerHTML = '<span class="text-gray-500">Enter amounts...</span>';
+    } else if (Math.abs(total) < 0.001) {
+        indicator.className = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-green-100 dark:bg-green-900/30 text-sm';
+        indicator.innerHTML = '<svg class="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg><span class="text-green-700 dark:text-green-400 font-medium">Balanced</span>';
+    } else {
+        indicator.className = 'flex items-center gap-2 px-3 py-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30 text-sm';
+        indicator.innerHTML = '<svg class="h-5 w-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg><span class="text-yellow-700 dark:text-yellow-400 font-medium">Imbalanced: ' + total.toFixed(2) + '</span>';
+    }
+}
+
+function resetForm(mode) {
+    const form = document.getElementById('txn-form-' + mode);
+    form.reset();
+    if (mode === 'add') {
+        document.getElementById('date-add').valueAsDate = new Date();
+    }
+    updateTransactionPreview(mode);
+}
+
+document.querySelectorAll('#txn-form-add input, #txn-form-edit input').forEach(input => {
+    input.addEventListener('input', (e) => {
+        const mode = e.target.closest('form').id.includes('edit') ? 'edit' : 'add';
+        updateTransactionPreview(mode);
+    });
+});
+</script>

@@ -20,6 +20,8 @@ pub struct CreateTransactionRequest {
     pub account_2: Option<String>,
     /// Second posting amount (optional).
     pub amount_2: Option<String>,
+    /// Additional postings as JSON array (for complex transactions with more than 2 postings)
+    pub additional_postings: Option<String>,
 }
 
 /// Request payload for toggling transaction cleared status.

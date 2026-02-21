@@ -79,7 +79,11 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-        .animate-toast-in {
+        @keyframes toast-slide-up {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-toast {
             animation: toast-slide-in 0.3s ease-out;
         }
     </style>
@@ -102,6 +106,17 @@
                 </svg>
                 Reload Now
             </button>
+        </div>
+    </div>
+    
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed bottom-4 right-4 z-50 space-y-2"></div>
+    
+    <!-- Status Bar -->
+    <div class="fixed top-0 right-0 z-40 p-2">
+        <div id="sync-status" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur shadow-sm text-xs font-medium text-green-600 dark:text-green-400 border border-green-200 dark:border-green-800">
+            <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span>Synced</span>
         </div>
     </div>
 
@@ -336,10 +351,93 @@
             if (notice) {
                 notice.classList.remove('hidden');
             }
+            updateSyncStatus('stale');
         }
         
-        // Make available globally
+        // Toast notification system
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-yellow-500',
+                info: 'bg-blue-500'
+            };
+            
+            const icons = {
+                success: '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>',
+                error: '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>',
+                warning: '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>',
+                info: '<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>'
+            };
+            
+            toast.className = `${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 min-w-[250px] animate-toast`;
+            toast.innerHTML = `${icons[type]}<span class="font-medium">${message}</span>`;
+            
+            container.appendChild(toast);
+            
+            // Auto-remove after 4 seconds
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(100%)';
+                toast.style.transition = 'all 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+        
+        // Update sync status indicator
+        function updateSyncStatus(status) {
+            const indicator = document.getElementById('sync-status');
+            if (!indicator) return;
+            
+            const configs = {
+                synced: {
+                    text: 'Synced',
+                    color: 'text-green-600 dark:text-green-400',
+                    border: 'border-green-200 dark:border-green-800',
+                    dot: 'bg-green-500',
+                    pulse: 'animate-pulse'
+                },
+                syncing: {
+                    text: 'Syncing...',
+                    color: 'text-blue-600 dark:text-blue-400',
+                    border: 'border-blue-200 dark:border-blue-800',
+                    dot: 'bg-blue-500',
+                    pulse: 'animate-pulse'
+                },
+                stale: {
+                    text: 'Reload needed',
+                    color: 'text-amber-600 dark:text-amber-400',
+                    border: 'border-amber-200 dark:border-amber-800',
+                    dot: 'bg-amber-500',
+                    pulse: ''
+                },
+                error: {
+                    text: 'Error',
+                    color: 'text-red-600 dark:text-red-400',
+                    border: 'border-red-200 dark:border-red-800',
+                    dot: 'bg-red-500',
+                    pulse: ''
+                }
+            };
+            
+            const config = configs[status];
+            indicator.className = `flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 backdrop-blur shadow-sm text-xs font-medium border ${config.color} ${config.border}`;
+            indicator.innerHTML = `<span class="w-2 h-2 rounded-full ${config.dot} ${config.pulse}"></span><span>${config.text}</span>`;
+        }
+        
+        // Simulate sync status updates
+        document.addEventListener('htmx:beforeRequest', () => updateSyncStatus('syncing'));
+        document.addEventListener('htmx:afterRequest', () => {
+            setTimeout(() => updateSyncStatus('synced'), 500);
+        });
+        
+        // Make functions available globally
         window.showFileChangeNotification = showFileChangeNotification;
+        window.showToast = showToast;
+        window.updateSyncStatus = updateSyncStatus;
     </script>
 </body>
 </html>

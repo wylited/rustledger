@@ -6,407 +6,122 @@
 <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
     <div>
         <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Accounts</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your chart of accounts and opening balances</p>
+        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage your chart of accounts</p>
     </div>
     <button onclick="document.getElementById('open-account-modal').showModal()" 
-            class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
-        <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            class="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors shadow-sm">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
         Open Account
     </button>
 </div>
 
-<!-- Quick Actions Cards -->
-<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-    <div class="bg-gradient-to-br from-green-500 to-green-600 rounded-xl p-5 text-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow" onclick="document.getElementById('open-account-modal').showModal()">
-        <div class="flex items-center gap-3">
-            <div class="bg-white/20 rounded-full p-2">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                </svg>
-            </div>
-            <div>
-                <h3 class="font-semibold">Open Account</h3>
-                <p class="text-green-100 text-sm">Create a new account with optional balance</p>
-            </div>
-        </div>
-    </div>
+<!-- Account Stats -->
+<div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+    {% set assets = [] %}
+    {% set liabilities = [] %}
+    {% set income = [] %}
+    {% set expenses = [] %}
+    {% set equity = [] %}
+    {% for account in accounts %}
+        {% if account is starting_with("Assets:") %}{% set_global assets = assets | concat(with=[account]) %}
+        {% elif account is starting_with("Liabilities:") %}{% set_global liabilities = liabilities | concat(with=[account]) %}
+        {% elif account is starting_with("Income:") %}{% set_global income = income | concat(with=[account]) %}
+        {% elif account is starting_with("Expenses:") %}{% set_global expenses = expenses | concat(with=[account]) %}
+        {% elif account is starting_with("Equity:") %}{% set_global equity = equity | concat(with=[account]) %}
+        {% endif %}
+    {% endfor %}
     
-    <div class="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl p-5 text-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow" onclick="document.getElementById('close-account-modal').showModal()">
-        <div class="flex items-center gap-3">
-            <div class="bg-white/20 rounded-full p-2">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </div>
-            <div>
-                <h3 class="font-semibold">Close Account</h3>
-                <p class="text-blue-100 text-sm">Close an existing account</p>
-            </div>
-        </div>
+    <div class="bg-green-50 dark:bg-green-900/20 rounded-xl p-4 border border-green-200 dark:border-green-800">
+        <div class="text-2xl font-bold text-green-700 dark:text-green-400">{{ assets | length }}</div>
+        <div class="text-sm text-green-600 dark:text-green-500">Assets</div>
     </div>
-    
-    <a href="/add" class="bg-gradient-to-br from-primary to-blue-600 rounded-xl p-5 text-white shadow-lg cursor-pointer hover:shadow-xl transition-shadow block">
-        <div class="flex items-center gap-3">
-            <div class="bg-white/20 rounded-full p-2">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-            </div>
-            <div>
-                <h3 class="font-semibold">Add Transaction</h3>
-                <p class="text-blue-100 text-sm">Record a new transaction</p>
-            </div>
-        </div>
-    </a>
+    <div class="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
+        <div class="text-2xl font-bold text-red-700 dark:text-red-400">{{ liabilities | length }}</div>
+        <div class="text-sm text-red-600 dark:text-red-500">Liabilities</div>
+    </div>
+    <div class="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
+        <div class="text-2xl font-bold text-purple-700 dark:text-purple-400">{{ income | length }}</div>
+        <div class="text-sm text-purple-600 dark:text-purple-500">Income</div>
+    </div>
+    <div class="bg-orange-50 dark:bg-orange-900/20 rounded-xl p-4 border border-orange-200 dark:border-orange-800">
+        <div class="text-2xl font-bold text-orange-700 dark:text-orange-400">{{ expenses | length }}</div>
+        <div class="text-sm text-orange-600 dark:text-orange-500">Expenses</div>
+    </div>
+    <div class="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+        <div class="text-2xl font-bold text-blue-700 dark:text-blue-400">{{ equity | length }}</div>
+        <div class="text-sm text-blue-600 dark:text-blue-500">Equity</div>
+    </div>
 </div>
 
-<!-- Accounts by Type -->
-<div class="bg-white shadow-lg rounded-xl dark:bg-gray-800 overflow-hidden">
+<!-- Accounts List -->
+<div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
     <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white">All Accounts ({{ accounts | length }})</h3>
         <div class="flex gap-2">
-            <button onclick="filterAccounts('all')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn active" data-filter="all">All</button>
-            <button onclick="filterAccounts('Assets')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn" data-filter="Assets">Assets</button>
-            <button onclick="filterAccounts('Liabilities')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn" data-filter="Liabilities">Liabilities</button>
-            <button onclick="filterAccounts('Income')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn" data-filter="Income">Income</button>
-            <button onclick="filterAccounts('Expenses')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn" data-filter="Expenses">Expenses</button>
-            <button onclick="filterAccounts('Equity')" class="px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 transition-colors filter-btn" data-filter="Equity">Equity</button>
+            <button onclick="filterAccounts('all')" class="filter-btn px-3 py-1 text-xs font-medium rounded-full bg-primary text-white" data-filter="all">All</button>
+            <button onclick="filterAccounts('Assets')" class="filter-btn px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" data-filter="Assets">Assets</button>
+            <button onclick="filterAccounts('Liabilities')" class="filter-btn px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" data-filter="Liabilities">Liabilities</button>
+            <button onclick="filterAccounts('Income')" class="filter-btn px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" data-filter="Income">Income</button>
+            <button onclick="filterAccounts('Expenses')" class="filter-btn px-3 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300" data-filter="Expenses">Expenses</button>
         </div>
     </div>
     <div class="p-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3" id="accounts-grid">
+        <div id="accounts-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {% for account in accounts %}
-            <a href="/accounts/{{ account }}" class="account-card flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-750 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group" data-account-type="{% if account is starting_with("Assets:") %}Assets{% elif account is starting_with("Liabilities:") %}Liabilities{% elif account is starting_with("Income:") %}Income{% elif account is starting_with("Expenses:") %}Expenses{% elif account is starting_with("Equity:") %}Equity{% else %}Other{% endif %}">
-                <div class="w-2 h-2 rounded-full flex-shrink-0
-                    {% if account is starting_with("Assets:") %}bg-green-500
-                    {% elif account is starting_with("Liabilities:") %}bg-red-500
-                    {% elif account is starting_with("Income:") %}bg-blue-500
-                    {% elif account is starting_with("Expenses:") %}bg-orange-500
-                    {% else %}bg-purple-500{% endif %}">
+            <a href="/accounts/{{ account }}" 
+               class="account-card flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-750 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
+               data-type="{% if account is starting_with('Assets:') %}Assets{% elif account is starting_with('Liabilities:') %}Liabilities{% elif account is starting_with('Income:') %}Income{% elif account is starting_with('Expenses:') %}Expenses{% elif account is starting_with('Equity:') %}Equity{% else %}Other{% endif %}">
+                <div class="w-3 h-3 rounded-full flex-shrink-0
+                    {% if account is starting_with('Assets:') %}bg-green-500
+                    {% elif account is starting_with('Liabilities:') %}bg-red-500
+                    {% elif account is starting_with('Income:') %}bg-purple-500
+                    {% elif account is starting_with('Expenses:') %}bg-orange-500
+                    {% else %}bg-blue-500{% endif %}">
                 </div>
-                <span class="text-sm font-medium text-gray-900 dark:text-white truncate" title="{{ account }}">
-                    {{ account }}
-                </span>
+                <span class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ account }}</span>
                 <svg class="h-4 w-4 text-gray-400 ml-auto opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
                 </svg>
             </a>
             {% endfor %}
         </div>
-        {% if accounts | length == 0 %}
-        <div class="text-center py-12">
-            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-            </svg>
-            <h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No accounts yet</h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Get started by opening your first account.</p>
-            <div class="mt-6">
-                <button onclick="document.getElementById('open-account-modal').showModal()" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                    <svg class="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Open Account
-                </button>
-            </div>
-        </div>
-        {% endif %}
     </div>
 </div>
 
 <!-- Open Account Modal -->
-<dialog id="open-account-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-lg bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 open:animate-fade-in backdrop:backdrop-blur-sm">
-    <div class="p-6">
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="bg-green-100 dark:bg-green-900/30 rounded-full p-2">
-                    <svg class="h-6 w-6 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Open New Account</h3>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Create a new account in your ledger</p>
-                </div>
-            </div>
-            <button type="button" onclick="document.getElementById('open-account-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-        
-        <form hx-post="/api/accounts/open" hx-target="#open-result" hx-swap="innerHTML" class="space-y-5">
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                    <label for="open-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Opening Date <span class="text-red-500">*</span>
-                    </label>
-                    <input type="date" name="date" id="open-date" required
-                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
-                </div>
-                <div>
-                    <label for="open-currencies" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                        Currencies
-                        <span class="text-gray-400 font-normal text-xs">(optional)</span>
-                    </label>
-                    <input type="text" name="currencies" id="open-currencies"
-                           placeholder="USD, EUR"
-                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
-                </div>
-            </div>
-            
-            <div>
-                <label for="open-account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Account Name <span class="text-red-500">*</span>
-                </label>
-                <div class="relative">
-                    <input type="text" name="account" id="open-account" required
-                           placeholder="e.g., Assets:Bank:Checking"
-                           class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border"
-                           pattern="(Assets|Liabilities|Equity|Income|Expenses):[A-Za-z0-9_:]+"
-                           title="Account must start with Assets:, Liabilities:, Equity:, Income:, or Expenses:">
-                </div>
-                <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
-                    Format: <code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">Type:Category:Name</code> 
-                    (e.g., <code class="bg-gray-100 dark:bg-gray-700 px-1 py-0.5 rounded">Assets:Bank:Chase</code>)
-                </p>
-                
-                <!-- Quick account type buttons -->
-                <div class="mt-3 flex flex-wrap gap-2">
-                    <span class="text-xs text-gray-500 dark:text-gray-400">Quick start:</span>
-                    <button type="button" onclick="setAccountPrefix('Assets:Bank:')" class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30 transition-colors">Assets:Bank:</button>
-                    <button type="button" onclick="setAccountPrefix('Assets:Cash:')" class="text-xs px-2 py-1 bg-green-50 text-green-700 rounded hover:bg-green-100 dark:bg-green-900/20 dark:text-green-300 dark:hover:bg-green-900/30 transition-colors">Assets:Cash:</button>
-                    <button type="button" onclick="setAccountPrefix('Liabilities:Credit:')" class="text-xs px-2 py-1 bg-red-50 text-red-700 rounded hover:bg-red-100 dark:bg-red-900/20 dark:text-red-300 dark:hover:bg-red-900/30 transition-colors">Liabilities:Credit:</button>
-                    <button type="button" onclick="setAccountPrefix('Expenses:')" class="text-xs px-2 py-1 bg-orange-50 text-orange-700 rounded hover:bg-orange-100 dark:bg-orange-900/20 dark:text-orange-300 dark:hover:bg-orange-900/30 transition-colors">Expenses:</button>
-                    <button type="button" onclick="setAccountPrefix('Income:')" class="text-xs px-2 py-1 bg-blue-50 text-blue-700 rounded hover:bg-blue-100 dark:bg-blue-900/20 dark:text-blue-300 dark:hover:bg-blue-900/30 transition-colors">Income:</button>
-                </div>
-            </div>
-            
-            <!-- Opening Balance Section -->
-            <div class="border-t border-gray-200 dark:border-gray-700 pt-5">
-                <div class="flex items-center justify-between mb-3">
-                    <h4 class="text-sm font-semibold text-gray-900 dark:text-white">Opening Balance</h4>
-                    <label class="inline-flex items-center cursor-pointer">
-                        <input type="checkbox" id="toggle-opening-balance" class="sr-only peer" onchange="toggleOpeningBalance()">
-                        <div class="relative w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-green-300 dark:peer-focus:ring-green-800 rounded-full peer dark:bg-gray-600 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-500"></div>
-                        <span class="ml-2 text-sm text-gray-600 dark:text-gray-400">Add opening balance</span>
-                    </label>
-                </div>
-                
-                <div id="opening-balance-fields" class="hidden space-y-4 bg-gray-50 dark:bg-gray-750 rounded-lg p-4">
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                            <label for="opening-balance" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                                Balance Amount
-                            </label>
-                            <input type="text" name="opening_balance" id="opening-balance"
-                                   placeholder="e.g., 1000.00 USD"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border font-mono">
-                            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Format: <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">amount CURRENCY</code></p>
-                        </div>
-                        <div>
-                            <label for="opening-balance-note" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                                Note
-                            </label>
-                            <input type="text" name="opening_balance_note" id="opening-balance-note"
-                                   placeholder="Opening balance"
-                                   class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
-                        </div>
-                    </div>
-                    
-                    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
-                        <div class="flex">
-                            <svg class="h-5 w-5 text-blue-400 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            <div class="text-sm text-blue-700 dark:text-blue-300">
-                                <p class="font-medium">How opening balances work:</p>
-                                <p class="mt-1">The opening balance will create a transaction between your new account and <code class="bg-blue-100 dark:bg-blue-800 px-1 rounded">Equity:Opening-Balances</code>. This follows standard accounting practices for initial account setup.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="flex justify-end gap-3 pt-2">
-                <button type="button" onclick="document.getElementById('open-account-modal').close()" 
-                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
-                    Cancel
-                </button>
-                <button type="submit" 
-                        class="inline-flex justify-center items-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 transition-colors">
-                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                    Open Account
-                </button>
-            </div>
-        </form>
-        <div id="open-result" class="mt-4"></div>
-    </div>
-</dialog>
-
-<!-- Close Account Modal -->
-<dialog id="close-account-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-md bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 open:animate-fade-in backdrop:backdrop-blur-sm">
-    <div class="p-6">
-        <div class="flex items-center justify-between mb-6">
-            <div class="flex items-center gap-3">
-                <div class="bg-red-100 dark:bg-red-900/30 rounded-full p-2">
-                    <svg class="h-6 w-6 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </div>
-                <div>
-                    <h3 class="text-xl font-semibold text-gray-900 dark:text-white">Close Account</h3>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">Close an existing account</p>
-                </div>
-            </div>
-            <button type="button" onclick="document.getElementById('close-account-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
-        </div>
-        
-        <form hx-post="/api/accounts/close" hx-target="#close-result" hx-swap="innerHTML" class="space-y-5">
-            <div>
-                <label for="close-date" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Closing Date <span class="text-red-500">*</span>
-                </label>
-                <input type="date" name="date" id="close-date" required
-                       class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
-            </div>
-            
-            <div>
-                <label for="close-account" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
-                    Account to Close <span class="text-red-500">*</span>
-                </label>
-                <select name="account" id="close-account" required
-                        class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-red-500 focus:ring-red-500 sm:text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white p-2.5 border">
-                    <option value="">Select account...</option>
-                    {% for account in accounts %}
-                    <option value="{{ account }}">{{ account }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            
-            <div class="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <div class="flex">
-                    <svg class="h-5 w-5 text-yellow-400 mr-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                    <div>
-                        <p class="text-sm font-medium text-yellow-800 dark:text-yellow-300">Important</p>
-                        <p class="mt-1 text-sm text-yellow-700 dark:text-yellow-400">
-                            Ensure the account has a zero balance before closing. Closing an account prevents future transactions but does not delete existing history.
-                        </p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="flex justify-end gap-3">
-                <button type="button" onclick="document.getElementById('close-account-modal').close()" 
-                        class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600 dark:hover:bg-gray-600 transition-colors">
-                    Cancel
-                </button>
-                <button type="submit" 
-                        class="inline-flex justify-center items-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors">
-                    <svg class="-ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                    Close Account
-                </button>
-            </div>
-        </form>
-        <div id="close-result" class="mt-4"></div>
-    </div>
+<dialog id="open-account-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-2xl bg-transparent backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm">
+    {% include "partials/account_open_form.html" %}
 </dialog>
 
 <script>
-// Set default dates
-document.getElementById('open-date').valueAsDate = new Date();
-document.getElementById('close-date').valueAsDate = new Date();
-
-// Toggle opening balance fields
-function toggleOpeningBalance() {
-    const checkbox = document.getElementById('toggle-opening-balance');
-    const fields = document.getElementById('opening-balance-fields');
-    if (checkbox.checked) {
-        fields.classList.remove('hidden');
-    } else {
-        fields.classList.add('hidden');
-        // Clear the fields when hidden
-        document.getElementById('opening-balance').value = '';
-        document.getElementById('opening-balance-note').value = '';
-    }
-}
-
-// Set account prefix
-function setAccountPrefix(prefix) {
-    const input = document.getElementById('open-account');
-    input.value = prefix;
-    input.focus();
-}
-
-// Filter accounts by type
 function filterAccounts(type) {
     const cards = document.querySelectorAll('.account-card');
     const buttons = document.querySelectorAll('.filter-btn');
     
-    // Update button states
     buttons.forEach(btn => {
         if (btn.dataset.filter === type) {
-            btn.classList.add('bg-primary', 'text-white');
             btn.classList.remove('bg-gray-100', 'text-gray-700', 'dark:bg-gray-700', 'dark:text-gray-300');
+            btn.classList.add('bg-primary', 'text-white');
         } else {
             btn.classList.remove('bg-primary', 'text-white');
             btn.classList.add('bg-gray-100', 'text-gray-700', 'dark:bg-gray-700', 'dark:text-gray-300');
         }
     });
     
-    // Filter cards
     cards.forEach(card => {
-        if (type === 'all' || card.dataset.accountType === type) {
-            card.style.display = 'flex';
-        } else {
-            card.style.display = 'none';
-        }
+        card.style.display = (type === 'all' || card.dataset.type === type) ? 'flex' : 'none';
     });
 }
 
-// Keyboard shortcuts
-document.addEventListener('keydown', function(e) {
-    // Don't trigger if user is typing in an input
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
-        return;
-    }
-    
-    // 'o' to open account modal
-    if (e.key === 'o' || e.key === 'O') {
-        e.preventDefault();
-        document.getElementById('open-account-modal').showModal();
-    }
-});
-
-// Close modal on successful submission
+// Close modal on success
 document.addEventListener('htmx:afterRequest', function(evt) {
-    if (evt.detail.successful) {
-        const target = evt.detail.target;
-        if (target.id === 'open-result' && target.textContent.includes('successfully')) {
-            setTimeout(() => {
-                document.getElementById('open-account-modal').close();
-                // Reload page to show new account
-                window.location.reload();
-            }, 1500);
-        } else if (target.id === 'close-result' && target.textContent.includes('successfully')) {
-            setTimeout(() => {
-                document.getElementById('close-account-modal').close();
-                // Reload page
-                window.location.reload();
-            }, 1500);
-        }
+    if (evt.detail.target.id === 'open-result' && evt.detail.successful) {
+        setTimeout(() => {
+            document.getElementById('open-account-modal').close();
+            window.location.reload();
+        }, 1500);
     }
 });
 </script>

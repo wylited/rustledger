@@ -328,7 +328,7 @@ pub async fn create_transaction(
     let flag = if payload.cleared.is_some() { "*" } else { "!" };
 
     // Escape quotes in payee and narration
-    let payee_str = if let Some(p) = payload.payee {
+    let payee_str = if let Some(ref p) = payload.payee {
         if !p.is_empty() {
             format!(" \"{}\"", p.replace('"', "\\\""))
         } else {
@@ -341,17 +341,42 @@ pub async fn create_transaction(
     let narration_str = format!("\"{}\"", payload.narration.replace('"', "\\\""));
 
     let mut txn_text = format!(
-        "\n{} {} {}{}\n  {} {}\n",
-        payload.date, flag, payee_str, narration_str, payload.account_1, payload.amount_1
+        "\n{} {} {}{}\n",
+        payload.date, flag, payee_str, narration_str
     );
 
-    if let (Some(acc2), Some(amt2)) = (payload.account_2, payload.amount_2) {
+    // Add postings
+    // First posting (required)
+    txn_text.push_str(&format!("  {} {}\n", payload.account_1, payload.amount_1));
+    
+    // Second posting (optional)
+    if let (Some(ref acc2), Some(ref amt2)) = (payload.account_2, payload.amount_2) {
         if !acc2.is_empty() {
-            if !validate_account(&acc2) {
+            if !validate_account(acc2) {
                 return Html("<div class='text-red-500'>Invalid second account name.</div>")
                     .into_response();
             }
             txn_text.push_str(&format!("  {} {}\n", acc2, amt2));
+        }
+    }
+    
+    // Additional postings from JSON
+    if let Some(ref additional) = payload.additional_postings {
+        if !additional.is_empty() {
+            match serde_json::from_str::<Vec<crate::models::PostingEdit>>(additional) {
+                Ok(postings) => {
+                    for posting in postings {
+                        if !posting.account.is_empty() {
+                            if validate_account(&posting.account) {
+                                txn_text.push_str(&format!("  {} {}\n", posting.account, posting.amount));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse additional postings: {}", e);
+                }
+            }
         }
     }
 
