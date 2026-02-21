@@ -108,6 +108,17 @@ pub struct EditTransactionRequest {
     pub account_2: Option<String>,
     /// New second amount.
     pub amount_2: Option<String>,
+    /// Additional postings as JSON array (for complex transactions with more than 2 postings)
+    pub additional_postings: Option<String>,
+}
+
+/// A single posting in a transaction edit
+#[derive(Deserialize, Debug)]
+pub struct PostingEdit {
+    /// Account name
+    pub account: String,
+    /// Amount
+    pub amount: String,
 }
 
 /// Query parameters for fetching the edit form.

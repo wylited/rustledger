@@ -64,7 +64,7 @@ fn validate_path(source_path: &str, ledger_path: &Path) -> Result<PathBuf, &'sta
 }
 
 /// Determines the target file for a transaction based on its date.
-/// Checks if a partitioned file (yy-mm.beancount) exists.
+/// Uses partitioned files (yy-mm.beancount) and creates them with include if needed.
 fn determine_target_file(ledger_path: &Path, date: &str) -> PathBuf {
     if date.len() < 7 {
         return ledger_path.to_path_buf();
@@ -77,24 +77,66 @@ fn determine_target_file(ledger_path: &Path, date: &str) -> PathBuf {
     let ledger_dir = ledger_path.parent().unwrap_or(Path::new("."));
     let partition_path = ledger_dir.join(&partition_filename);
     
-    if partition_path.exists() {
-        partition_path
-    } else {
-        ledger_path.to_path_buf()
-    }
+    partition_path
 }
 
 /// Determines the target file for account operations (open/close).
-/// Checks if accounts.beancount exists.
-fn determine_accounts_file(ledger_path: &Path) -> PathBuf {
+/// Uses accounts-yy-mm.beancount format based on date.
+fn determine_accounts_file(ledger_path: &Path, date: &str) -> PathBuf {
     let ledger_dir = ledger_path.parent().unwrap_or(Path::new("."));
-    let accounts_path = ledger_dir.join("accounts.beancount");
     
+    // If we have a valid date, use accounts-yy-mm.beancount format
+    if date.len() >= 7 {
+        let yy = &date[2..4];
+        let mm = &date[5..7];
+        let accounts_partition_filename = format!("accounts-{}-{}.beancount", yy, mm);
+        let accounts_partition_path = ledger_dir.join(&accounts_partition_filename);
+        return accounts_partition_path;
+    }
+    
+    // Fallback to accounts.beancount if it exists
+    let accounts_path = ledger_dir.join("accounts.beancount");
     if accounts_path.exists() {
         accounts_path
     } else {
-        ledger_path.to_path_buf()
+        // Default to accounts.beancount (will be created)
+        accounts_path
     }
+}
+
+/// Ensures that a file is included in the main ledger file.
+/// Adds an include directive if it doesn't already exist.
+fn ensure_include_in_main(main_path: &Path, file_to_include: &str) -> anyhow::Result<()> {
+    let content = fs::read_to_string(main_path)?;
+    let include_line = format!(r#"include "{}""#, file_to_include);
+    
+    // Check if already included
+    if content.contains(&include_line) {
+        return Ok(());
+    }
+    
+    // Add include at the top of the file (after options if present)
+    let new_content = if content.contains("option") {
+        // Find the end of option lines
+        let lines: Vec<&str> = content.lines().collect();
+        let mut insert_pos = 0;
+        for (i, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("option") || trimmed.is_empty() || trimmed.starts_with(";") || trimmed.starts_with("#") {
+                insert_pos = i + 1;
+            } else {
+                break;
+            }
+        }
+        let mut new_lines = lines.clone();
+        new_lines.insert(insert_pos, &include_line);
+        new_lines.join("\n")
+    } else {
+        format!("{}\n\n{}", include_line, content)
+    };
+    
+    fs::write(main_path, new_content)?;
+    Ok(())
 }
 
 /// Helper function to load the ledger with caching.
@@ -317,6 +359,33 @@ pub async fn create_transaction(
     let _write_guard = state.write_lock.lock().await;
 
     let target_path = determine_target_file(&state.ledger_path, &payload.date);
+    let is_partitioned_file = target_path != state.ledger_path;
+    
+    // Check if we need to create the file and add include
+    let is_new_file = !target_path.exists();
+    
+    if is_new_file {
+        // Create the new file with a header
+        let header = format!("; Transactions for {}-{}", &payload.date[0..4], &payload.date[5..7]);
+        if let Err(e) = fs::write(&target_path, format!("{}\n", header)) {
+            return Html(format!(
+                "<div class='text-red-500'>Error creating file: {}</div>",
+                e
+            ))
+            .into_response();
+        }
+        
+        // Add include to main file if it's a partitioned file
+        if is_partitioned_file {
+            let filename = target_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if let Err(e) = ensure_include_in_main(&state.ledger_path, filename) {
+                tracing::warn!("Failed to add include to main file: {}", e);
+                // Continue anyway, the transaction will still be written
+            }
+        }
+    }
 
     // Append to file
     let mut file = match OpenOptions::new().append(true).open(&target_path) {
@@ -616,6 +685,21 @@ pub async fn get_edit_form(
     context.insert("amount_1", amounts.first().unwrap_or(&String::new()));
     context.insert("account_2", accounts.get(1).unwrap_or(&String::new()));
     context.insert("amount_2", amounts.get(1).unwrap_or(&String::new()));
+    
+    // Insert all postings for complex transactions
+    let all_postings: Vec<std::collections::HashMap<String, String>> = accounts.iter().zip(amounts.iter())
+        .enumerate()
+        .map(|(i, (acc, amt))| {
+            let mut map = std::collections::HashMap::new();
+            map.insert("index".to_string(), (i + 1).to_string());
+            map.insert("account".to_string(), acc.clone());
+            map.insert("amount".to_string(), amt.clone());
+            map
+        })
+        .collect();
+    context.insert("all_postings", &all_postings);
+    context.insert("posting_count", &all_postings.len());
+    
     context.insert("original_offset", &params.offset);
     context.insert("original_length", &params.length);
     context.insert("original_source_path", &params.source_path);
@@ -685,7 +769,7 @@ pub async fn update_transaction(
     let flag = if payload.cleared.is_some() { "*" } else { "!" };
 
     // Escape quotes in payee and narration
-    let payee_str = if let Some(p) = payload.payee {
+    let payee_str = if let Some(ref p) = payload.payee {
         if !p.is_empty() {
             format!(" \"{}\"", p.replace('"', "\\\""))
         } else {
@@ -698,17 +782,42 @@ pub async fn update_transaction(
     let narration_str = format!("\"{}\"", payload.narration.replace('"', "\\\""));
 
     let mut new_txn_text = format!(
-        "\n{} {} {}{}\n  {} {}\n",
-        payload.date, flag, payee_str, narration_str, payload.account_1, payload.amount_1
+        "\n{} {} {}{}\n",
+        payload.date, flag, payee_str, narration_str
     );
 
-    if let (Some(acc2), Some(amt2)) = (payload.account_2, payload.amount_2) {
+    // Add postings
+    // First posting (required)
+    new_txn_text.push_str(&format!("  {} {}\n", payload.account_1, payload.amount_1));
+    
+    // Second posting (optional)
+    if let (Some(ref acc2), Some(ref amt2)) = (payload.account_2, payload.amount_2) {
         if !acc2.is_empty() {
-            if !validate_account(&acc2) {
+            if !validate_account(acc2) {
                 return Html("<div class='text-red-500'>Invalid second account name.</div>")
                     .into_response();
             }
             new_txn_text.push_str(&format!("  {} {}\n", acc2, amt2));
+        }
+    }
+    
+    // Additional postings from JSON
+    if let Some(ref additional) = payload.additional_postings {
+        if !additional.is_empty() {
+            match serde_json::from_str::<Vec<crate::models::PostingEdit>>(additional) {
+                Ok(postings) => {
+                    for posting in postings {
+                        if !posting.account.is_empty() {
+                            if validate_account(&posting.account) {
+                                new_txn_text.push_str(&format!("  {} {}\n", posting.account, posting.amount));
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse additional postings: {}", e);
+                }
+            }
         }
     }
 
@@ -983,7 +1092,34 @@ pub async fn open_account(
     // Acquire write lock to serialize file modifications
     let _write_guard = state.write_lock.lock().await;
 
-    let target_path = determine_accounts_file(&state.ledger_path);
+    let target_path = determine_accounts_file(&state.ledger_path, &payload.date);
+    let is_partitioned_file = target_path != state.ledger_path;
+    
+    // Check if we need to create the file and add include
+    let is_new_file = !target_path.exists();
+    
+    if is_new_file {
+        // Create the new file with a header
+        let header = format!("; Account definitions for {}-{}", &payload.date[0..4], &payload.date[5..7]);
+        if let Err(e) = fs::write(&target_path, format!("{}\n", header)) {
+            return Html(format!(
+                r#"<div class="text-red-500 p-4">Error creating file: {}</div>"#,
+                e
+            ))
+            .into_response();
+        }
+        
+        // Add include to main file if it's a partitioned file
+        if is_partitioned_file {
+            let filename = target_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if let Err(e) = ensure_include_in_main(&state.ledger_path, filename) {
+                tracing::warn!("Failed to add include to main file: {}", e);
+                // Continue anyway
+            }
+        }
+    }
 
     // Append to ledger file
     let mut file = match OpenOptions::new().append(true).open(&target_path) {
@@ -1055,6 +1191,32 @@ pub async fn open_account(
 
         // Write to the appropriate transaction file
         let txn_path = determine_target_file(&state.ledger_path, &payload.date);
+        let txn_is_partitioned = txn_path != state.ledger_path;
+        
+        // Check if we need to create the transaction file
+        let txn_is_new = !txn_path.exists();
+        
+        if txn_is_new {
+            // Create the new file with a header
+            let header = format!("; Transactions for {}-{}", &payload.date[0..4], &payload.date[5..7]);
+            if let Err(e) = fs::write(&txn_path, format!("{}\n", header)) {
+                return Html(format!(
+                    r#"<div class="text-yellow-500 p-4">Account opened but failed to create opening balance file: {}</div>"#,
+                    e
+                ))
+                .into_response();
+            }
+            
+            // Add include to main file if it's a partitioned file
+            if txn_is_partitioned {
+                let filename = txn_path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                if let Err(e) = ensure_include_in_main(&state.ledger_path, filename) {
+                    tracing::warn!("Failed to add include to main file: {}", e);
+                }
+            }
+        }
         
         let mut txn_file = match OpenOptions::new().append(true).open(&txn_path) {
             Ok(f) => f,
@@ -1139,7 +1301,33 @@ pub async fn close_account(
     // Acquire write lock to serialize file modifications
     let _write_guard = state.write_lock.lock().await;
 
-    let target_path = determine_accounts_file(&state.ledger_path);
+    let target_path = determine_accounts_file(&state.ledger_path, &payload.date);
+    let is_partitioned_file = target_path != state.ledger_path;
+    
+    // Check if we need to create the file and add include
+    let is_new_file = !target_path.exists();
+    
+    if is_new_file {
+        // Create the new file with a header
+        let header = format!("; Account definitions for {}-{}", &payload.date[0..4], &payload.date[5..7]);
+        if let Err(e) = fs::write(&target_path, format!("{}\n", header)) {
+            return Html(format!(
+                r#"<div class="text-red-500 p-4">Error creating file: {}</div>"#,
+                e
+            ))
+            .into_response();
+        }
+        
+        // Add include to main file if it's a partitioned file
+        if is_partitioned_file {
+            let filename = target_path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("");
+            if let Err(e) = ensure_include_in_main(&state.ledger_path, filename) {
+                tracing::warn!("Failed to add include to main file: {}", e);
+            }
+        }
+    }
 
     // Append to ledger file
     let mut file = match OpenOptions::new().append(true).open(&target_path) {
