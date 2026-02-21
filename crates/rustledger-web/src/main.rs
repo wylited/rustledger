@@ -1,6 +1,7 @@
 mod handlers;
 mod models;
 mod utils;
+mod file_watcher;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -12,10 +13,11 @@ use axum::{
 };
 use clap::Parser;
 use tera::Tera;
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, mpsc};
 use tower_http::services::ServeDir;
 
 use crate::handlers::AppState;
+use crate::file_watcher::spawn_file_watcher;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -55,12 +57,31 @@ async fn main() -> anyhow::Result<()> {
     // Disable auto-escaping for HTML content if needed
     tera.autoescape_on(vec![".html", ".sql"]);
 
+    // Channel for file change notifications
+    let (file_change_tx, mut file_change_rx) = mpsc::channel(10);
+
     // Shared state with caching and write synchronization
     let state = Arc::new(AppState {
         ledger_path: args.ledger_file.clone(),
         tera,
         cached_ledger: RwLock::new(None),
         write_lock: Mutex::new(()),
+        file_change_tx,
+    });
+
+    // Spawn file watcher
+    let watcher_state = Arc::clone(&state);
+    spawn_file_watcher(watcher_state)?;
+
+    // Spawn background task to handle file change notifications
+    let notification_state = Arc::clone(&state);
+    tokio::spawn(async move {
+        while let Some(_change) = file_change_rx.recv().await {
+            // Invalidate cache when file changes externally
+            let mut cache = notification_state.cached_ledger.write().await;
+            *cache = None;
+            tracing::info!("Ledger file changed externally, cache invalidated");
+        }
     });
 
     // Build router

@@ -189,6 +189,22 @@ pub struct OpenAccountRequest {
     pub account: String,
     /// Currencies/commodities the account can hold (comma-separated).
     pub currencies: Option<String>,
+    /// Opening balance amount (e.g., "1000.00 USD").
+    pub opening_balance: Option<String>,
+    /// Note for the opening balance transaction.
+    pub opening_balance_note: Option<String>,
+}
+
+/// Request payload for creating a balance assertion.
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+pub struct CreateBalanceRequest {
+    /// Date for the balance assertion (YYYY-MM-DD).
+    pub date: String,
+    /// Account name.
+    pub account: String,
+    /// Balance amount (e.g., "1000.00 USD").
+    pub amount: String,
 }
 
 /// Request payload for closing an account.

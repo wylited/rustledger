@@ -14,6 +14,7 @@ use tokio::sync::{Mutex, RwLock};
 
 use rustledger_loader::{LoadResult, Loader};
 
+use crate::file_watcher::FileChangeEvent;
 use crate::models::{
     CloseAccountRequest, CreateTransactionRequest, DeleteTransactionRequest,
     EditTransactionRequest, GetEditFormRequest, IncomeExpenseStats, NetWorthStats,
@@ -34,6 +35,8 @@ pub struct AppState {
     pub cached_ledger: RwLock<Option<LoadResult>>,
     /// Mutex to serialize file write operations
     pub write_lock: Mutex<()>,
+    /// Channel sender for file change notifications
+    pub file_change_tx: tokio::sync::mpsc::Sender<FileChangeEvent>,
 }
 
 /// Validates that a path is safe to access (within the ledger directory).
@@ -925,6 +928,7 @@ pub async fn get_net_worth_history(State(state): State<Arc<AppState>>) -> impl I
 use chrono::Datelike;
 
 /// Handler to open a new account.
+/// Supports creating an opening balance transaction following beancount conventions.
 pub async fn open_account(
     State(state): State<Arc<AppState>>,
     Form(payload): Form<OpenAccountRequest>,
@@ -938,6 +942,28 @@ pub async fn open_account(
     if !validate_account(&payload.account) {
         return Html(r#"<div class="text-red-500 p-4">Invalid account name.</div>"#.to_string())
             .into_response();
+    }
+
+    // Validate opening balance if provided
+    let has_opening_balance = payload
+        .opening_balance
+        .as_ref()
+        .map(|b| !b.trim().is_empty())
+        .unwrap_or(false);
+
+    if has_opening_balance {
+        // Validate opening balance format (should be something like "1000.00 USD")
+        let balance = payload.opening_balance.as_ref().unwrap().trim();
+        let parts: Vec<&str> = balance.split_whitespace().collect();
+        if parts.len() < 2 {
+            return Html(r#"<div class="text-red-500 p-4">Opening balance must include amount and currency (e.g., "1000.00 USD").</div>"#.to_string())
+                .into_response();
+        }
+        // Validate amount is numeric
+        if parts[0].parse::<f64>().is_err() {
+            return Html(r#"<div class="text-red-500 p-4">Opening balance amount must be a valid number.</div>"#.to_string())
+                .into_response();
+        }
     }
 
     // Build the open directive
@@ -979,17 +1005,117 @@ pub async fn open_account(
         .into_response();
     }
 
+    // If opening balance is provided, create the opening balance transaction
+    let mut opening_balance_created = false;
+    if has_opening_balance {
+        let balance = payload.opening_balance.as_ref().unwrap().trim();
+        let note = payload
+            .opening_balance_note
+            .as_ref()
+            .map(|n| n.trim())
+            .filter(|n| !n.is_empty())
+            .unwrap_or("Opening balance");
+
+        // Determine the equity account based on the account type
+        let equity_account = determine_equity_account(&payload.account);
+
+        // Parse the balance to determine the sign
+        let parts: Vec<&str> = balance.split_whitespace().collect();
+        let amount_str = parts[0];
+        let currency = parts[1];
+
+        // For opening balance: 
+        // - Asset accounts get a positive balance (debit)
+        // - Liability accounts get a negative balance (credit)
+        // The offsetting Equity:Opening-Balances posting balances it out
+        let (account_amount, equity_amount) = if payload.account.starts_with("Assets:") {
+            (format!("{} {}", amount_str, currency), format!("-{} {}", amount_str, currency))
+        } else if payload.account.starts_with("Liabilities:") {
+            (format!("-{} {}", amount_str, currency), format!("{} {}", amount_str, currency))
+        } else if payload.account.starts_with("Equity:") {
+            (format!("{} {}", amount_str, currency), format!("-{} {}", amount_str, currency))
+        } else {
+            // For Income/Expenses, use the absolute value
+            (format!("{} {}", amount_str, currency), format!("-{} {}", amount_str, currency))
+        };
+
+        let txn_text = format!(
+            r#"
+{} * "" "{}"
+  {} {}
+  {} {}
+"#,
+            payload.date,
+            note,
+            payload.account,
+            account_amount,
+            equity_account,
+            equity_amount
+        );
+
+        // Write to the appropriate transaction file
+        let txn_path = determine_target_file(&state.ledger_path, &payload.date);
+        
+        let mut txn_file = match OpenOptions::new().append(true).open(&txn_path) {
+            Ok(f) => f,
+            Err(e) => {
+                return Html(format!(
+                    r#"<div class="text-yellow-500 p-4">Account opened but failed to create opening balance: {}</div>"#,
+                    e
+                ))
+                .into_response();
+            }
+        };
+
+        if let Err(e) = txn_file.write_all(txn_text.as_bytes()) {
+            return Html(format!(
+                r#"<div class="text-yellow-500 p-4">Account opened but failed to create opening balance: {}</div>"#,
+                e
+            ))
+            .into_response();
+        }
+
+        opening_balance_created = true;
+    }
+
     // Invalidate cache after successful write
     invalidate_cache(&state).await;
 
     // Return success message
-    Html(format!(
-        r#"<div class="text-green-600 dark:text-green-400 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
-            ✓ Account <strong>{}</strong> opened successfully
-        </div>"#,
-        payload.account
-    ))
-    .into_response()
+    if opening_balance_created {
+        Html(format!(
+            r#"<div class="text-green-600 dark:text-green-400 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                <div class="font-semibold mb-1">✓ Account opened successfully</div>
+                <div class="text-sm text-green-700 dark:text-green-300">
+                    Account <strong>{}</strong> opened with opening balance of <strong>{}</strong>
+                </div>
+            </div>"#,
+            payload.account,
+            payload.opening_balance.as_ref().unwrap()
+        ))
+        .into_response()
+    } else {
+        Html(format!(
+            r#"<div class="text-green-600 dark:text-green-400 p-4 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                ✓ Account <strong>{}</strong> opened successfully
+            </div>"#,
+            payload.account
+        ))
+        .into_response()
+    }
+}
+
+/// Determine the appropriate Equity account for opening balance transactions.
+fn determine_equity_account(account: &str) -> String {
+    if account.starts_with("Assets:") || account.starts_with("Liabilities:") {
+        "Equity:Opening-Balances".to_string()
+    } else if account.starts_with("Income:") {
+        "Equity:Opening-Balances".to_string()
+    } else if account.starts_with("Expenses:") {
+        "Equity:Opening-Balances".to_string()
+    } else {
+        "Equity:Opening-Balances".to_string()
+    }
 }
 
 /// Handler to close an account.
