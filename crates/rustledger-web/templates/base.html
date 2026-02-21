@@ -212,6 +212,147 @@
         </div>
     </div>
     
+    <!-- Command Palette -->
+    <dialog id="command-palette" class="rounded-xl shadow-2xl p-0 w-full max-w-2xl bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm">
+        <div class="p-4">
+            <div class="relative">
+                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+                <input type="text" id="command-input" placeholder="Type a command... (e.g., 'new transaction', 'open account')" 
+                       class="block w-full pl-10 pr-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg leading-5 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                       autocomplete="off">
+            </div>
+            <div id="command-results" class="mt-2 max-h-80 overflow-y-auto space-y-1">
+                <!-- Commands populated by JS -->
+            </div>
+        </div>
+    </dialog>
+    
+    <!-- Account Picker Modal -->
+    <dialog id="account-picker-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-md bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm">
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Select Account</h3>
+                <button onclick="document.getElementById('account-picker-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="relative mb-4">
+                <input type="text" id="account-search" placeholder="Search accounts..." 
+                       class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div id="account-list-mobile" class="max-h-80 overflow-y-auto space-y-1">
+                <!-- Accounts populated by JS -->
+            </div>
+        </div>
+    </dialog>
+    
+    <!-- Recent Transactions Modal -->
+    <dialog id="recent-txn-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-lg bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm">
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Recent Transactions</h3>
+                <button onclick="document.getElementById('recent-txn-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div id="recent-txn-list" class="max-h-96 overflow-y-auto space-y-2">
+                <!-- Transactions populated by JS -->
+            </div>
+            <a href="/transactions" class="block mt-4 text-center text-sm text-blue-600 dark:text-blue-400 hover:underline">View All Transactions</a>
+        </div>
+    </dialog>
+    
+    <!-- Query Modal -->
+    <dialog id="query-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-4xl bg-white dark:bg-gray-800 backdrop:bg-gray-900/50 backdrop:backdrop-blur-sm">
+        <div class="p-4">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Query Ledger (BQL)</h3>
+                <button onclick="document.getElementById('query-modal').close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <div class="mb-4">
+                <textarea id="query-input" rows="3" placeholder="SELECT account, sum(position) WHERE account ~ 'Expenses:' GROUP BY account"
+                          class="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                <p class="mt-1 text-xs text-gray-500">Beancount Query Language (BQL) - SQL-like syntax for ledger queries</p>
+            </div>
+            <div class="flex gap-2 mb-4">
+                <button onclick="executeQuery()" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">Run Query</button>
+                <button onclick="document.getElementById('query-modal').close()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 dark:text-gray-300 dark:border-gray-600">Cancel</button>
+            </div>
+            <div id="query-results" class="max-h-96 overflow-auto">
+                <!-- Results populated by JS -->
+            </div>
+        </div>
+    </dialog>
+    
+    <!-- Quick Actions Menu (Mobile) -->
+    <div id="quick-actions-menu" class="fixed bottom-20 right-4 z-50 hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-2 space-y-1 min-w-[180px]">
+            <a href="/add" class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                <div class="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                    <svg class="h-4 w-4 text-blue-600 dark:text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                </div>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">New Transaction</span>
+            </a>
+            <button onclick="document.getElementById('quick-actions-menu').classList.add('hidden'); document.getElementById('open-account-modal').showModal();" class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left">
+                <div class="w-8 h-8 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+                    <svg class="h-4 w-4 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                </div>
+                <span class="text-sm font-medium text-gray-900 dark:text-white">Open Account</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Mobile Bottom Navigation -->
+    <nav class="md:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-40 px-2 pb-safe">
+        <div class="flex items-center justify-around py-2">
+            <button onclick="window.location.href='/'" class="flex flex-col items-center gap-0.5 p-2 rounded-lg {% if current_page == 'dashboard' %}text-blue-600{% else %}text-gray-600 dark:text-gray-400{% endif %}">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                </svg>
+                <span class="text-[10px] font-medium">Home</span>
+            </button>
+            
+            <button onclick="showAccountPicker()" class="flex flex-col items-center gap-0.5 p-2 rounded-lg text-gray-600 dark:text-gray-400">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <span class="text-[10px] font-medium">Accounts</span>
+            </button>
+            
+            <button onclick="showRecentTransactions()" class="flex flex-col items-center gap-0.5 p-2 rounded-lg text-gray-600 dark:text-gray-400">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                <span class="text-[10px] font-medium">Transactions</span>
+            </button>
+            
+            <button onclick="document.getElementById('quick-actions-menu').classList.toggle('hidden')" class="flex flex-col items-center gap-0.5 p-2 rounded-lg text-blue-600">
+                <div class="w-12 h-12 -mt-6 bg-blue-600 rounded-full flex items-center justify-center shadow-lg">
+                    <svg class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    </svg>
+                </div>
+                <span class="text-[10px] font-medium">Quick</span>
+            </button>
+        </div>
+    </nav>
+    
     <!-- Keyboard Shortcuts Modal -->
     <dialog id="shortcuts-modal" class="rounded-xl shadow-2xl p-0 w-full max-w-md bg-white dark:bg-gray-800 backdrop:bg-gray-900/50">
         <div class="p-6">
@@ -329,10 +470,16 @@
                 e.preventDefault();
                 showKeyboardShortcuts();
             }
+            // 'k' or Cmd/Ctrl+K: Show command palette
+            else if (e.key === 'k' && !e.ctrlKey && !e.metaKey || (e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                showCommandPalette();
+            }
             // Escape: Close modals
             else if (e.key === 'Escape') {
                 const modals = document.querySelectorAll('dialog[open]');
                 modals.forEach(modal => modal.close());
+                document.getElementById('quick-actions-menu')?.classList.add('hidden');
             }
         });
         
@@ -438,6 +585,231 @@
         window.showFileChangeNotification = showFileChangeNotification;
         window.showToast = showToast;
         window.updateSyncStatus = updateSyncStatus;
+        
+        // Command Palette
+        const commands = [
+            { name: 'New Transaction', shortcut: 'n', icon: 'plus', action: () => window.location.href = '/add' },
+            { name: 'View Transactions', shortcut: 't', icon: 'list', action: () => window.location.href = '/transactions' },
+            { name: 'Dashboard', shortcut: 'd', icon: 'home', action: () => window.location.href = '/' },
+            { name: 'Accounts', shortcut: 'a', icon: 'book', action: () => window.location.href = '/accounts' },
+            { name: 'Open Account', shortcut: 'o', icon: 'folder-plus', action: () => { document.getElementById('open-account-modal')?.showModal(); } },
+            { name: 'Query', shortcut: 'q', icon: 'search', action: () => { document.getElementById('query-modal')?.showModal(); } },
+            { name: 'Keyboard Shortcuts', shortcut: '?', icon: 'keyboard', action: showKeyboardShortcuts }
+        ];
+        
+        function showCommandPalette() {
+            const modal = document.getElementById('command-palette');
+            const input = document.getElementById('command-input');
+            const results = document.getElementById('command-results');
+            
+            modal.showModal();
+            input.value = '';
+            input.focus();
+            renderCommands(commands);
+            
+            input.oninput = () => {
+                const query = input.value.toLowerCase();
+                const filtered = commands.filter(c => c.name.toLowerCase().includes(query));
+                renderCommands(filtered);
+            };
+            
+            function renderCommands(cmds) {
+                results.innerHTML = cmds.map((c, i) => `
+                    <button type="button" class="command-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left ${i === 0 ? 'bg-gray-50 dark:bg-gray-700/50' : ''}" data-index="${i}" onclick="executeCommand(${commands.indexOf(c)})">
+                        <div class="w-8 h-8 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                            <span class="text-sm font-medium text-gray-600 dark:text-gray-400">${c.shortcut}</span>
+                        </div>
+                        <span class="flex-1 text-gray-900 dark:text-white">${c.name}</span>
+                    </button>
+                `).join('') || '<div class="text-center text-gray-500 py-4">No commands found</div>';
+            }
+            
+            input.onkeydown = (e) => {
+                const items = results.querySelectorAll('.command-item');
+                const active = results.querySelector('.bg-gray-50, .bg-gray-700\\/50');
+                let index = Array.from(items).indexOf(active);
+                
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    index = Math.min(index + 1, items.length - 1);
+                    items.forEach((item, i) => {
+                        item.classList.toggle('bg-gray-50', i === index);
+                        item.classList.toggle('dark:bg-gray-700/50', i === index);
+                    });
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    index = Math.max(index - 1, 0);
+                    items.forEach((item, i) => {
+                        item.classList.toggle('bg-gray-50', i === index);
+                        item.classList.toggle('dark:bg-gray-700/50', i === index);
+                    });
+                } else if (e.key === 'Enter' && index >= 0) {
+                    e.preventDefault();
+                    items[index].click();
+                }
+            };
+        }
+        
+        function executeCommand(index) {
+            const cmd = commands[index];
+            if (cmd) {
+                document.getElementById('command-palette').close();
+                cmd.action();
+            }
+        }
+        
+        window.showCommandPalette = showCommandPalette;
+        window.executeCommand = executeCommand;
+        
+        // Mobile Account Picker
+        function showAccountPicker() {
+            const modal = document.getElementById('account-picker-modal');
+            const list = document.getElementById('account-list-mobile');
+            const search = document.getElementById('account-search');
+            
+            // Get accounts from the page or fetch them
+            let accounts = [];
+            document.querySelectorAll('datalist#account-list-add option, datalist#accounts-list-add option').forEach(opt => {
+                accounts.push(opt.value);
+            });
+            
+            // Fallback: fetch accounts
+            if (accounts.length === 0) {
+                fetch('/api/accounts').then(r => r.json()).then(data => {
+                    accounts = data;
+                    renderAccounts(accounts);
+                });
+            }
+            
+            function renderAccounts(accs) {
+                list.innerHTML = accs.map(acc => {
+                    const type = acc.split(':')[0];
+                    const colors = {
+                        Assets: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+                        Liabilities: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+                        Income: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
+                        Expenses: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
+                        Equity: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+                    };
+                    const color = colors[type] || 'bg-gray-100 text-gray-800';
+                    return `
+                        <a href="/accounts/${encodeURIComponent(acc)}" class="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors" onclick="document.getElementById('account-picker-modal').close()">
+                            <div class="w-2 h-2 rounded-full ${type === 'Assets' ? 'bg-green-500' : type === 'Liabilities' ? 'bg-red-500' : type === 'Income' ? 'bg-purple-500' : type === 'Expenses' ? 'bg-orange-500' : 'bg-blue-500'}"></div>
+                            <span class="text-sm text-gray-900 dark:text-white">${acc}</span>
+                        </a>
+                    `;
+                }).join('');
+            }
+            
+            renderAccounts(accounts);
+            
+            search.oninput = () => {
+                const query = search.value.toLowerCase();
+                const filtered = accounts.filter(a => a.toLowerCase().includes(query));
+                renderAccounts(filtered);
+            };
+            
+            modal.showModal();
+            search.focus();
+        }
+        
+        window.showAccountPicker = showAccountPicker;
+        
+        // Mobile Recent Transactions
+        function showRecentTransactions() {
+            const modal = document.getElementById('recent-txn-modal');
+            const list = document.getElementById('recent-txn-list');
+            
+            fetch('/api/recent-transactions').then(r => r.json()).then(txns => {
+                list.innerHTML = txns.map(t => `
+                    <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-750 rounded-lg">
+                        <div>
+                            <div class="text-sm font-medium text-gray-900 dark:text-white">${t.narration}</div>
+                            <div class="text-xs text-gray-500 dark:text-gray-400">${t.date} ${t.payee ? '• ' + t.payee : ''}</div>
+                        </div>
+                        <button onclick="editTransaction(${t.offset}, ${t.length}, '${t.source_path}')" class="p-2 text-gray-400 hover:text-blue-500">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                        </button>
+                    </div>
+                `).join('') || '<div class="text-center text-gray-500 py-4">No recent transactions</div>';
+            }).catch(() => {
+                // Fallback: just show link to transactions
+                list.innerHTML = '<div class="text-center text-gray-500 py-4">View all transactions</div>';
+            });
+            
+            modal.showModal();
+        }
+        
+        window.showRecentTransactions = showRecentTransactions;
+        
+        // Close quick actions when clicking outside
+        document.addEventListener('click', (e) => {
+            const menu = document.getElementById('quick-actions-menu');
+            const btn = e.target.closest('button[onclick*="quick-actions-menu"]');
+            if (!btn && menu && !menu.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        });
+        
+        // Query execution
+        async function executeQuery() {
+            const input = document.getElementById('query-input');
+            const results = document.getElementById('query-results');
+            const query = input.value.trim();
+            
+            if (!query) {
+                showToast('Please enter a query', 'warning');
+                return;
+            }
+            
+            results.innerHTML = '<div class="flex justify-center py-8"><svg class="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg></div>';
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: `query=${encodeURIComponent(query)}`
+                });
+                
+                const data = await response.json();
+                
+                if (data.error) {
+                    results.innerHTML = `<div class="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg"><strong>Error:</strong> ${escapeHtml(data.error)}</div>`;
+                } else if (data.columns && data.rows) {
+                    let html = '<div class="overflow-x-auto"><table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700"><thead class="bg-gray-50 dark:bg-gray-700"><tr>';
+                    data.columns.forEach(col => {
+                        html += `<th class="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase">${escapeHtml(col)}</th>`;
+                    });
+                    html += '</tr></thead><tbody class="divide-y divide-gray-200 dark:divide-gray-700">';
+                    
+                    data.rows.forEach(row => {
+                        html += '<tr class="hover:bg-gray-50 dark:hover:bg-gray-700">';
+                        data.columns.forEach(col => {
+                            html += `<td class="px-4 py-2 text-sm text-gray-900 dark:text-white font-mono">${escapeHtml(row[col] || '')}</td>`;
+                        });
+                        html += '</tr>';
+                    });
+                    
+                    html += '</tbody></table></div>';
+                    results.innerHTML = html;
+                } else {
+                    results.innerHTML = '<div class="text-gray-500 text-center py-4">No results</div>';
+                }
+            } catch (e) {
+                results.innerHTML = `<div class="p-4 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 rounded-lg"><strong>Error:</strong> ${escapeHtml(e.message)}</div>`;
+            }
+        }
+        
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        window.executeQuery = executeQuery;
     </script>
 </body>
 </html>

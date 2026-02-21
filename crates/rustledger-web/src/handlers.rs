@@ -14,11 +14,12 @@ use tokio::sync::{Mutex, RwLock};
 
 use rustledger_loader::{LoadResult, Loader};
 
+use serde::Deserialize;
 use crate::file_watcher::FileChangeEvent;
 use crate::models::{
     CloseAccountRequest, CreateTransactionRequest, DeleteTransactionRequest,
     EditTransactionRequest, GetEditFormRequest, IncomeExpenseStats, NetWorthStats,
-    OpenAccountRequest, ToggleStatusRequest,
+    OpenAccountRequest, RecentTransaction, ToggleStatusRequest,
 };
 use crate::utils::{
     build_account_tree, calculate_account_balance, calculate_cash_flow_history,
@@ -1529,4 +1530,88 @@ mod tests {
         // Cleanup
         let _ = fs::remove_dir_all(dir);
     }
+}
+
+/// Query request
+#[derive(Deserialize, Debug)]
+pub struct QueryRequest {
+    pub query: String,
+}
+
+/// Handler to execute BQL queries
+pub async fn execute_query(
+    State(state): State<Arc<AppState>>,
+    Form(payload): Form<QueryRequest>,
+) -> impl IntoResponse {
+    let load_result = match load_ledger(&state).await {
+        Ok(res) => res,
+        Err(e) => return Json(serde_json::json!({"error": e.to_string()})).into_response(),
+    };
+
+    // Parse the query
+    let query = match rustledger_query::parse(&payload.query) {
+        Ok(q) => q,
+        Err(e) => return Json(serde_json::json!({"error": format!("Parse error: {:?}", e)})).into_response(),
+    };
+
+    // Convert Spanned<Directive> to Directive
+    let directives: Vec<_> = load_result.directives.iter().map(|d| d.value.clone()).collect();
+    
+    // Execute the query
+    let mut executor = rustledger_query::Executor::new(&directives);
+    match executor.execute(&query) {
+        Ok(result) => {
+            let rows: Vec<serde_json::Value> = result.rows.iter().map(|row| {
+                let mut obj = serde_json::Map::new();
+                for (i, col) in result.columns.iter().enumerate() {
+                    let value = match &row[i] {
+                        rustledger_query::Value::Null => serde_json::Value::Null,
+                        rustledger_query::Value::String(s) => serde_json::Value::String(s.to_string()),
+                        rustledger_query::Value::Number(n) => serde_json::Value::String(n.to_string()),
+                        rustledger_query::Value::Integer(n) => serde_json::Value::Number((*n).into()),
+                        rustledger_query::Value::Date(d) => serde_json::Value::String(d.to_string()),
+                        rustledger_query::Value::Boolean(b) => serde_json::Value::Bool(*b),
+                        rustledger_query::Value::Amount(a) => serde_json::Value::String(format!("{}", a)),
+                        rustledger_query::Value::Position(p) => serde_json::Value::String(format!("{}", p)),
+                        rustledger_query::Value::Inventory(i) => serde_json::Value::String(format!("{:?}", i)),
+                        rustledger_query::Value::StringSet(s) => serde_json::Value::Array(s.iter().map(|v| serde_json::Value::String(v.clone())).collect()),
+                    };
+                    obj.insert(col.clone(), value);
+                }
+                serde_json::Value::Object(obj)
+            }).collect();
+            
+            Json(serde_json::json!({
+                "columns": result.columns,
+                "rows": rows
+            })).into_response()
+        }
+        Err(e) => Json(serde_json::json!({"error": format!("Execution error: {:?}", e)})).into_response(),
+    }
+}
+
+/// Handler to get recent transactions for mobile
+pub async fn get_recent_transactions(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let load_result = match load_ledger(&state).await {
+        Ok(res) => res,
+        Err(_) => return Json(Vec::<RecentTransaction>::new()).into_response(),
+    };
+
+    let transactions = extract_recent_transactions(&load_result.directives, &load_result.directive_sources, 10);
+    Json(transactions).into_response()
+}
+
+/// Handler to get accounts list for mobile
+pub async fn get_accounts_list(
+    State(state): State<Arc<AppState>>,
+) -> impl IntoResponse {
+    let load_result = match load_ledger(&state).await {
+        Ok(res) => res,
+        Err(_) => return Json(Vec::<String>::new()).into_response(),
+    };
+
+    let accounts = extract_accounts(&load_result.directives);
+    Json(accounts).into_response()
 }

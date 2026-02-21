@@ -118,6 +118,9 @@ async fn main() -> anyhow::Result<()> {
             "/api/stats/net-worth-history",
             get(handlers::get_net_worth_history),
         )
+        .route("/api/query", post(handlers::execute_query))
+        .route("/api/recent-transactions", get(handlers::get_recent_transactions))
+        .route("/api/accounts", get(handlers::get_accounts_list))
         .nest_service(
             "/assets",
             ServeDir::new("assets").fallback(ServeDir::new("crates/rustledger-web/assets")),
